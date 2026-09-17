@@ -1,0 +1,38 @@
+# ── Python / Backend ──────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+.env
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+.mypy_cache/
+.venv/
+venv/
+
+# ── Flutter / Dart ────────────────────────────────────────────────────────────
+frontend/build/
+frontend/.dart_tool/
+frontend/.packages
+frontend/.flutter-plugins
+frontend/.flutter-plugins-dependencies
+frontend/.metadata
+frontend/.idea/
+frontend/*.iml
+frontend/android/.gradle/
+frontend/android/local.properties
+frontend/android/app/google-services.json
+frontend/ios/Pods/
+frontend/ios/.symlinks/
+frontend/pubspec.lock
+
+# ── OS ────────────────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ── IDE ───────────────────────────────────────────────────────────────────────
+.vscode/
+*.swp
+*.swo

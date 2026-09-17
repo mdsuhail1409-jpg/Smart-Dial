@@ -1,0 +1,98 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- ── Permissions required for a default dialer ───────────────────── -->
+    <!-- INTERNET: FastAPI cloud communication -->
+    <uses-permission android:name="android.permission.INTERNET"/>
+    <!-- READ_PHONE_STATE: observe call state via InCallService -->
+    <uses-permission android:name="android.permission.READ_PHONE_STATE"/>
+    <!-- CALL_PHONE: place outgoing cellular calls via TelecomManager -->
+    <uses-permission android:name="android.permission.CALL_PHONE"/>
+    <!-- READ_CALL_LOG: read call history (future phases) -->
+    <uses-permission android:name="android.permission.READ_CALL_LOG"/>
+    <!-- MANAGE_OWN_CALLS: allows non-default-dialer SIM call placement -->
+    <uses-permission android:name="android.permission.MANAGE_OWN_CALLS"/>
+
+    <application
+        android:label="smartdial"
+        android:name="${applicationName}"
+        android:icon="@mipmap/ic_launcher">
+
+        <!-- ── Main Flutter Activity ────────────────────────────────────── -->
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:launchMode="singleTop"
+            android:taskAffinity=""
+            android:theme="@style/LaunchTheme"
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
+            android:hardwareAccelerated="true"
+            android:windowSoftInputMode="adjustResize">
+
+            <meta-data
+                android:name="io.flutter.embedding.android.NormalTheme"
+                android:resource="@style/NormalTheme"/>
+
+            <!-- Launcher intent -->
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN"/>
+                <category android:name="android.intent.category.LAUNCHER"/>
+            </intent-filter>
+
+            <!--
+                ACTION_DIAL: SmartDial can receive dial intents (required for
+                default dialer role eligibility).  The tel: scheme means we handle
+                tel:+91XXXXXXXXXX URIs.
+                IMPORTANT: emergency calls are NOT intercepted here — Android
+                routes those through the system emergency dialer automatically.
+            -->
+            <intent-filter>
+                <action android:name="android.intent.action.DIAL"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:scheme="tel"/>
+            </intent-filter>
+
+            <intent-filter>
+                <action android:name="android.intent.action.DIAL"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+            </intent-filter>
+        </activity>
+
+        <!--
+            SmartDialInCallService — required for default-dialer role.
+            Bound by Android Telecom when this app is the default phone app.
+            BIND_INCALL_SERVICE permission ensures only Android Telecom can bind.
+        -->
+        <service
+            android:name=".SmartDialInCallService"
+            android:permission="android.permission.BIND_INCALL_SERVICE"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.telecom.InCallService"/>
+            </intent-filter>
+            <!-- Declares this as a default-dialer-capable InCallService -->
+            <meta-data
+                android:name="android.telecom"
+                android:value="true"/>
+        </service>
+
+        <!-- Flutter embedding meta-data — do NOT remove -->
+        <meta-data
+            android:name="flutterEmbedding"
+            android:value="2"/>
+    </application>
+
+    <!-- Required to query activities that can process text -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.PROCESS_TEXT"/>
+            <data android:mimeType="text/plain"/>
+        </intent>
+        <!-- Allow querying the system telecom dialer -->
+        <intent>
+            <action android:name="android.intent.action.DIAL"/>
+            <data android:scheme="tel"/>
+        </intent>
+    </queries>
+
+</manifest>

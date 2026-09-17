@@ -1,0 +1,13 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!--
+        DEBUG build overrides.
+        INTERNET permission is required for Flutter tooling (hot-reload, etc.)
+        and for the app to reach the FastAPI backend over the local network.
+    -->
+    <uses-permission android:name="android.permission.INTERNET"/>
+
+    <application
+        android:networkSecurityConfig="@xml/network_security_config"
+        android:usesCleartextTraffic="true">
+    </application>
+</manifest>
