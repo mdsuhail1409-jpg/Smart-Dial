@@ -18,8 +18,18 @@ class UserResponse(BaseModel):
     email: EmailStr
     phone: str
     status: str
+    reciprocal_call_preference: str = "ASK"
+    dnd_enabled: bool = False
+    vip_contacts: str = ""
     created_at: datetime
     updated_at: datetime
+
+
+class UserPreferenceUpdate(BaseModel):
+    """Schema for updating reciprocal call preferences and context rules."""
+    reciprocal_call_preference: str | None = None
+    dnd_enabled: bool | None = None
+    vip_contacts: str | None = None
 
 
 class UserListResponse(BaseModel):

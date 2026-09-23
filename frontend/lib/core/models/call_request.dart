@@ -40,6 +40,28 @@ class CallRequest {
   bool get isPending => status == 'PENDING';
   bool get isCancelled => status == 'CANCELLED';
   bool get isExpired => status == 'EXPIRED';
+
+  CallRequest copyWith({
+    String? requestId,
+    UserSummary? caller,
+    UserSummary? receiver,
+    String? status,
+    bool? reciprocalFlag,
+    String? pairId,
+    DateTime? requestTime,
+    DateTime? expiresAt,
+  }) {
+    return CallRequest(
+      requestId: requestId ?? this.requestId,
+      caller: caller ?? this.caller,
+      receiver: receiver ?? this.receiver,
+      status: status ?? this.status,
+      reciprocalFlag: reciprocalFlag ?? this.reciprocalFlag,
+      pairId: pairId ?? this.pairId,
+      requestTime: requestTime ?? this.requestTime,
+      expiresAt: expiresAt ?? this.expiresAt,
+    );
+  }
 }
 
 /// Minimal user summary embedded in call request responses.

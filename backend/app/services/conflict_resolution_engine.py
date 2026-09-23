@@ -75,6 +75,68 @@ def resolve(
     pref_a = context.user_a_preference
     pref_b = context.user_b_preference
 
+    dnd_a = getattr(context, "dnd_a", "FALSE") == "TRUE"
+    dnd_b = getattr(context, "dnd_b", "FALSE") == "TRUE"
+    vip_a = getattr(context, "vip_a_in_b_contacts", "FALSE") == "TRUE"
+    vip_b = getattr(context, "vip_b_in_a_contacts", "FALSE") == "TRUE"
+
+    # ── Phase 9 Priority 0A: Mutual DND without VIP bypass ──────────────────
+    if dnd_a and dnd_b and not vip_a and not vip_b:
+        return ResolutionResult(
+            decision_type    = DecisionType.BLOCK,
+            selected_request = None,
+            reason_code      = ReasonCode.DND_ACTIVE,
+        )
+
+    # ── Phase 9 Priority 0B: Individual DND + VIP Bypass ────────────────────
+    if dnd_b:
+        if vip_a:
+            # VIP breaks through User B's DND
+            return ResolutionResult(
+                decision_type    = DecisionType.ALLOW_A_TO_B,
+                selected_request = request_a,
+                reason_code      = ReasonCode.VIP_PRIORITY,
+            )
+        else:
+            # User B cannot receive calls, but if User A has DND off, B's call can reach A
+            if not dnd_a:
+                return ResolutionResult(
+                    decision_type    = DecisionType.ALLOW_B_TO_A,
+                    selected_request = request_b,
+                    reason_code      = ReasonCode.DND_ACTIVE,
+                )
+
+    if dnd_a:
+        if vip_b:
+            # VIP breaks through User A's DND
+            return ResolutionResult(
+                decision_type    = DecisionType.ALLOW_B_TO_A,
+                selected_request = request_b,
+                reason_code      = ReasonCode.VIP_PRIORITY,
+            )
+        else:
+            # User A cannot receive calls, but if User B has DND off, A's call can reach B
+            if not dnd_b:
+                return ResolutionResult(
+                    decision_type    = DecisionType.ALLOW_A_TO_B,
+                    selected_request = request_a,
+                    reason_code      = ReasonCode.DND_ACTIVE,
+                )
+
+    # ── Phase 9 Priority 0C: VIP Contact Asymmetry (No active DND) ──────────
+    if vip_a and not vip_b:
+        return ResolutionResult(
+            decision_type    = DecisionType.ALLOW_A_TO_B,
+            selected_request = request_a,
+            reason_code      = ReasonCode.VIP_PRIORITY,
+        )
+    elif vip_b and not vip_a:
+        return ResolutionResult(
+            decision_type    = DecisionType.ALLOW_B_TO_A,
+            selected_request = request_b,
+            reason_code      = ReasonCode.VIP_PRIORITY,
+        )
+
     # ── Priority 1: Either user wants to block reciprocal calls ─────────────
     if (pref_a == ReciprocalCallPreference.BLOCK_RECIPROCAL.value or
             pref_b == ReciprocalCallPreference.BLOCK_RECIPROCAL.value):

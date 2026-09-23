@@ -9,7 +9,7 @@ Security notes:
 import enum
 from datetime import datetime, timezone
 
-from sqlalchemy import Column, Integer, String, Enum, DateTime
+from sqlalchemy import Column, Integer, String, Enum, DateTime, Boolean
 from sqlalchemy.sql import func
 
 from app.database import Base
@@ -62,6 +62,20 @@ class User(Base):
         nullable=False,
         default=ReciprocalCallPreference.ASK,
         server_default=ReciprocalCallPreference.ASK.value,
+    )
+
+    # Phase 9: Context rules (DND & VIP Contacts)
+    dnd_enabled: bool = Column(
+        Boolean,
+        default=False,
+        nullable=False,
+        server_default="0",
+    )
+    vip_contacts: str = Column(
+        String(1000),
+        default="",
+        nullable=False,
+        server_default="",
     )
 
     created_at: datetime = Column(

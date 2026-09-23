@@ -1,15 +1,15 @@
 plugins {
     id("com.android.application")
+    id("kotlin-android")
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
     id("dev.flutter.flutter-gradle-plugin")
 }
 
 android {
     namespace = "com.smartdial.smartdial"
-    // compileSdk 37 required by permission_handler ^13.
-    // The android-37 platform is linked from android-37.0 in the SDK.
-    compileSdk = 37
-    ndkVersion = flutter.ndkVersion
+    // compileSdk 35 matches installed Android SDK platform
+    compileSdk = 35
+    ndkVersion = "27.0.12077973"
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
@@ -22,7 +22,7 @@ android {
         // TelecomManager.placeCall requires API 26+.
         // We set a hard floor of 26 so Telecom APIs are always available.
         minSdk = 26
-        targetSdk = 36
+        targetSdk = 35
         versionCode = flutter.versionCode
         versionName = flutter.versionName
     }

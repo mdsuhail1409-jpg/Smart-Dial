@@ -44,6 +44,27 @@ def _now_utc() -> datetime:
     return datetime.now(timezone.utc)
 
 
+def _broadcast_pair_detected(pair: ReciprocalPair) -> None:
+    """Best-effort broadcast of RECIPROCAL_DETECTED event across thread boundaries."""
+    try:
+        from app.services.connection_manager import manager
+        event = {
+            "event": "RECIPROCAL_DETECTED",
+            "pair_id": pair.pair_id,
+            "request_a_id": pair.request_a_id,
+            "request_b_id": pair.request_b_id,
+            "caller_a_id": pair.request_a.caller_id,
+            "caller_b_id": pair.request_b.caller_id,
+            "time_difference_ms": pair.time_difference_ms,
+        }
+        manager.publish_to_users_threadsafe(
+            [pair.request_a.caller_id, pair.request_b.caller_id],
+            event,
+        )
+    except Exception:
+        pass
+
+
 def _as_aware(dt: datetime) -> datetime:
     """Ensure a datetime is timezone-aware (SQLite compat)."""
     if dt.tzinfo is None:
@@ -223,6 +244,7 @@ def detect_reciprocal(
         db.refresh(pair)
         db.refresh(req_a)
         db.refresh(req_b)
+        _broadcast_pair_detected(pair)
         return ReciprocalDetectionResult(matched=True, pair=pair)
 
     except IntegrityError:

@@ -9,5 +9,6 @@ void main() {
     await tester.pumpWidget(const SmartDialApp());
     // SplashScreen should be visible initially
     expect(find.text('SmartDial'), findsWidgets);
+    await tester.pump(const Duration(milliseconds: 900));
   });
 }

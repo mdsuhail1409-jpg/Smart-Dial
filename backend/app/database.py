@@ -9,10 +9,12 @@ from app.config import get_settings
 
 settings = get_settings()
 
+connect_args = {"check_same_thread": False} if "sqlite" in settings.DATABASE_URL else {}
+
 engine = create_engine(
     settings.DATABASE_URL,
-    # pool_pre_ping keeps connections healthy after idle periods (important for Supabase)
     pool_pre_ping=True,
+    connect_args=connect_args,
 )
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)

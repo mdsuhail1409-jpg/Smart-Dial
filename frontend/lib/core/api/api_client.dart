@@ -227,4 +227,117 @@ class ApiClient {
       return ApiResult.failure('Could not cancel call request: $e');
     }
   }
+
+  /// POST /api/reciprocal-pairs/{pair_id}/decision/respond
+  static Future<ApiResult<Map<String, dynamic>>> respondToDecision({
+    required String pairId,
+    required String action,
+  }) async {
+    try {
+      final response = await http
+          .post(
+            Uri.parse('$_base/api/reciprocal-pairs/$pairId/decision/respond'),
+            headers: await _authHeaders(),
+            body: jsonEncode({'action': action}),
+          )
+          .timeout(const Duration(seconds: 15));
+
+      if (response.statusCode == 200) {
+        return ApiResult.success(jsonDecode(response.body) as Map<String, dynamic>);
+      }
+      return ApiResult.failure(_errorDetail(response));
+    } catch (e) {
+      return ApiResult.failure('Could not respond to decision: $e');
+    }
+  }
+
+  /// GET /api/reciprocal-pairs/{pair_id}/decision
+  static Future<ApiResult<Map<String, dynamic>>> getDecision(String pairId) async {
+    try {
+      final response = await http
+          .get(
+            Uri.parse('$_base/api/reciprocal-pairs/$pairId/decision'),
+            headers: await _authHeaders(),
+          )
+          .timeout(const Duration(seconds: 15));
+
+      if (response.statusCode == 200) {
+        return ApiResult.success(jsonDecode(response.body) as Map<String, dynamic>);
+      }
+      return ApiResult.failure(_errorDetail(response));
+    } catch (e) {
+      return ApiResult.failure('Could not fetch decision: $e');
+    }
+  }
+
+  /// GET /api/reciprocal-pairs — fetch history of collision events
+  static Future<ApiResult<List<dynamic>>> getReciprocalPairs() async {
+    try {
+      final response = await http
+          .get(
+            Uri.parse('$_base/api/reciprocal-pairs'),
+            headers: await _authHeaders(),
+          )
+          .timeout(const Duration(seconds: 15));
+
+      if (response.statusCode == 200) {
+        final body = jsonDecode(response.body) as Map<String, dynamic>;
+        final pairs = body['pairs'] as List<dynamic>? ?? [];
+        return ApiResult.success(pairs);
+      }
+      return ApiResult.failure(_errorDetail(response));
+    } catch (e) {
+      return ApiResult.failure('Could not fetch collision history: $e');
+    }
+  }
+
+  /// GET /api/users/me — fetch current user profile
+  static Future<ApiResult<Map<String, dynamic>>> getMe() async {
+    try {
+      final response = await http
+          .get(
+            Uri.parse('$_base/api/users/me'),
+            headers: await _authHeaders(),
+          )
+          .timeout(const Duration(seconds: 15));
+
+      if (response.statusCode == 200) {
+        return ApiResult.success(jsonDecode(response.body) as Map<String, dynamic>);
+      }
+      return ApiResult.failure(_errorDetail(response));
+    } catch (e) {
+      return ApiResult.failure('Could not fetch profile: $e');
+    }
+  }
+
+  /// PATCH /api/users/me/preferences — update DND, VIP, or reciprocal preferences
+  static Future<ApiResult<Map<String, dynamic>>> updatePreferences({
+    String? reciprocalCallPreference,
+    bool? dndEnabled,
+    String? vipContacts,
+  }) async {
+    try {
+      final body = <String, dynamic>{
+        if (reciprocalCallPreference != null)
+          'reciprocal_call_preference': reciprocalCallPreference,
+        if (dndEnabled != null) 'dnd_enabled': dndEnabled,
+        if (vipContacts != null) 'vip_contacts': vipContacts,
+      };
+
+      final response = await http
+          .patch(
+            Uri.parse('$_base/api/users/me/preferences'),
+            headers: await _authHeaders(),
+            body: jsonEncode(body),
+          )
+          .timeout(const Duration(seconds: 15));
+
+      if (response.statusCode == 200) {
+        return ApiResult.success(jsonDecode(response.body) as Map<String, dynamic>);
+      }
+      return ApiResult.failure(_errorDetail(response));
+    } catch (e) {
+      return ApiResult.failure('Could not update preferences: $e');
+    }
+  }
 }

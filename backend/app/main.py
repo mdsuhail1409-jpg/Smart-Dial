@@ -18,12 +18,15 @@ Routes:
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.routers import auth, users, calls, reciprocal, decision
+from app.database import Base, engine
+from app.routers import auth, users, calls, reciprocal, decision, websocket
+
+Base.metadata.create_all(bind=engine)
 
 app = FastAPI(
     title="SmartDial API",
     description="Smart Reciprocal Call Coordination System",
-    version="0.4.0",
+    version="0.5.0",
 )
 
 # CORS — open for development; tighten for production
@@ -41,6 +44,7 @@ app.include_router(users.router)
 app.include_router(calls.router)
 app.include_router(reciprocal.router)
 app.include_router(decision.router)
+app.include_router(websocket.router)
 
 
 # ── Health check ─────────────────────────────────────────────────────────────

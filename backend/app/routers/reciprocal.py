@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.dependencies import get_current_user
 from app.models.user import User
+from app.models.communication_decision import CommunicationDecision
 from app.schemas.call import UserSummary
 from app.schemas.reciprocal import (
     ReciprocalPairResponse,
@@ -25,8 +26,16 @@ from app.services.reciprocal_detection_service import (
 router = APIRouter(prefix="/api/reciprocal-pairs", tags=["reciprocal-pairs"])
 
 
-def _pair_to_response(pair) -> ReciprocalPairResponse:
-    """Convert a ReciprocalPair ORM object to the response schema."""
+def _pair_to_response(pair, db: Session | None = None) -> ReciprocalPairResponse:
+    """Convert a ReciprocalPair ORM object to the response schema with telemetry."""
+    decision_type = None
+    reason_code = None
+    if db is not None:
+        dec = db.query(CommunicationDecision).filter(CommunicationDecision.pair_id == pair.pair_id).first()
+        if dec:
+            decision_type = dec.decision_type.value
+            reason_code = dec.reason_code.value
+
     return ReciprocalPairResponse(
         pair_id    = pair.pair_id,
         request_a  = ReciprocalRequestSummary(
@@ -42,6 +51,8 @@ def _pair_to_response(pair) -> ReciprocalPairResponse:
         detected_at        = pair.detected_at,
         time_difference_ms = pair.time_difference_ms,
         status             = pair.status.value,
+        decision_type      = decision_type,
+        reason_code        = reason_code,
     )
 
 
@@ -57,7 +68,7 @@ def list_my_pairs(
     """Return all reciprocal pairs where the current user is a participant."""
     pairs = get_my_pairs(current_user_id=current_user.id, db=db)
     return ReciprocalPairListResponse(
-        pairs=[_pair_to_response(p) for p in pairs],
+        pairs=[_pair_to_response(p, db=db) for p in pairs],
         total=len(pairs),
     )
 
@@ -87,4 +98,4 @@ def get_pair(
     except PermissionError as exc:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc))
 
-    return _pair_to_response(pair)
+    return _pair_to_response(pair, db=db)

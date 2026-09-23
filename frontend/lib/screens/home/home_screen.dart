@@ -8,6 +8,7 @@ import '../../services/call_service.dart';
 import '../../services/user_service.dart';
 import '../calling/calling_screen.dart';
 import '../dialer_status/dialer_status_screen.dart';
+import '../history/collision_history_screen.dart';
 
 /// Home screen — displayed after successful login.
 ///
@@ -155,6 +156,15 @@ class _HomeScreenState extends State<HomeScreen> {
               context,
               MaterialPageRoute(
                   builder: (_) => const DialerStatusScreen()),
+            ),
+          ),
+          IconButton(
+            icon: const Icon(Icons.bolt),
+            tooltip: 'Collision history & telemetry',
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                  builder: (_) => const CollisionHistoryScreen()),
             ),
           ),
           IconButton(

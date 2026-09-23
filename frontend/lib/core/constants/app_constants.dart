@@ -18,6 +18,13 @@ class AppConstants {
   // JWT storage key
   static const String jwtStorageKey = 'smartdial_jwt';
 
+  /// WebSocket endpoint derived from baseUrl
+  static String get wsUrl {
+    final uri = Uri.parse(baseUrl);
+    final wsScheme = uri.scheme == 'https' ? 'wss' : 'ws';
+    return '$wsScheme://${uri.host}:${uri.port}/ws/calls';
+  }
+
   // App name
   static const String appName = 'SmartDial';
 }

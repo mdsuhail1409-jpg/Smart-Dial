@@ -85,17 +85,39 @@ def build_context(pair: ReciprocalPair, db: Session) -> ContextSnapshot:
     user_a: User | None = db.get(User, req_a.caller_id)
     user_b: User | None = db.get(User, req_b.caller_id)
 
+    # Phase 9: Context rules evaluation (DND & VIP Contacts)
+    dnd_a = "TRUE" if (user_a and getattr(user_a, "dnd_enabled", False)) else "FALSE"
+    dnd_b = "TRUE" if (user_b and getattr(user_b, "dnd_enabled", False)) else "FALSE"
+
+    def _is_vip(candidate: User | None, target_user: User | None) -> str:
+        if not candidate or not target_user:
+            return "FALSE"
+        vips = [v.strip() for v in getattr(target_user, "vip_contacts", "").split(",") if v.strip()]
+        if not vips:
+            return "FALSE"
+        if candidate.phone in vips or str(candidate.id) in vips:
+            return "TRUE"
+        return "FALSE"
+
+    vip_a_in_b = _is_vip(user_a, user_b)
+    vip_b_in_a = _is_vip(user_b, user_a)
+
     return ContextSnapshot(
-        user_a_id         = req_a.caller_id,
-        user_a_status     = user_a.status.value if user_a else _UNKNOWN,
-        user_a_preference = (
+        user_a_id           = req_a.caller_id,
+        user_a_status       = user_a.status.value if user_a else _UNKNOWN,
+        user_a_preference   = (
             user_a.reciprocal_call_preference.value
             if user_a else _UNKNOWN
         ),
-        user_b_id         = req_b.caller_id,
-        user_b_status     = user_b.status.value if user_b else _UNKNOWN,
-        user_b_preference = (
+        user_b_id           = req_b.caller_id,
+        user_b_status       = user_b.status.value if user_b else _UNKNOWN,
+        user_b_preference   = (
             user_b.reciprocal_call_preference.value
             if user_b else _UNKNOWN
         ),
+        dnd_a               = dnd_a,
+        dnd_b               = dnd_b,
+        vip_a_in_b_contacts = vip_a_in_b,
+        vip_b_in_a_contacts = vip_b_in_a,
+        network_condition   = "OPTIMAL",
     )

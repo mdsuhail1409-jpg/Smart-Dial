@@ -26,6 +26,8 @@ class ReciprocalPairResponse(BaseModel):
     detected_at: datetime
     time_difference_ms: int
     status: str
+    decision_type: str | None = None
+    reason_code: str | None = None
 
 
 class ReciprocalPairListResponse(BaseModel):

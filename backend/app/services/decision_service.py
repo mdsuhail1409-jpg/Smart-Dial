@@ -41,6 +41,47 @@ def _now_utc() -> datetime:
     return datetime.now(timezone.utc)
 
 
+def _broadcast_decision_resolved(decision: CommunicationDecision, pair: ReciprocalPair) -> None:
+    """Best-effort broadcast of DECISION_RESOLVED event with per-user action instructions."""
+    try:
+        from app.services.connection_manager import manager
+
+        user_a_id = pair.request_a.caller_id
+        user_b_id = pair.request_b.caller_id
+
+        def get_user_action(user_id: int) -> str:
+            d_type = decision.decision_type.value if hasattr(decision.decision_type, "value") else str(decision.decision_type)
+            if d_type == "ALLOW_A_TO_B":
+                return "PROCEED" if user_id == user_a_id else "STANDBY"
+            elif d_type == "ALLOW_B_TO_A":
+                return "PROCEED" if user_id == user_b_id else "STANDBY"
+            elif d_type == "BLOCK":
+                return "BLOCK"
+            else:
+                return "ASK_USER"
+
+        base_event = {
+            "event": "DECISION_RESOLVED",
+            "pair_id": decision.pair_id,
+            "decision_id": decision.decision_id,
+            "decision_type": decision.decision_type.value if hasattr(decision.decision_type, "value") else str(decision.decision_type),
+            "selected_request_id": decision.selected_request_id,
+            "reason_code": decision.reason_code.value if hasattr(decision.reason_code, "value") else str(decision.reason_code),
+            "status": decision.status.value if hasattr(decision.status, "value") else str(decision.status),
+        }
+
+        manager.publish_to_user_threadsafe(
+            user_a_id,
+            {**base_event, "action": get_user_action(user_a_id)},
+        )
+        manager.publish_to_user_threadsafe(
+            user_b_id,
+            {**base_event, "action": get_user_action(user_b_id)},
+        )
+    except Exception:
+        pass
+
+
 def _is_participant(pair: ReciprocalPair, user_id: int) -> bool:
     participants = {
         pair.request_a.caller_id,
@@ -120,6 +161,7 @@ def evaluate_decision(
     try:
         db.commit()
         db.refresh(decision)
+        _broadcast_decision_resolved(decision, pair)
         return decision
     except IntegrityError:
         # Race: another thread created the decision between our check and insert
@@ -223,4 +265,5 @@ def respond_to_decision(
 
     db.commit()
     db.refresh(decision)
+    _broadcast_decision_resolved(decision, pair)
     return decision

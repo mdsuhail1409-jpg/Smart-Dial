@@ -1,23 +1,25 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import '../../core/api/api_client.dart';
 import '../../core/models/call_request.dart';
 import '../../core/models/user.dart';
 import '../../services/call_service.dart';
 import '../../services/telecom_service.dart';
+import '../../services/websocket_service.dart';
 import '../incall/incall_screen.dart';
 
-/// Calling Screen — Phase 4
+/// Calling Screen — Phase 4-8
 ///
 /// Shown after User A presses CALL on User B.
 ///
 /// Flow:
 ///  1. Cloud call intent (CR_...) already created — passed in as [initialRequest].
-///  2. "Place SIM Call" button: requests CALL_PHONE permission, then invokes
-///     TelecomService.placeCellularCall(receiver.phone).
-///  3. Android Telecom → SIM → Carrier → Receiver phone rings.
-///  4. When InCallService fires CALL_ADDED, this screen auto-navigates to
-///     the full InCallScreen for in-call controls.
-///  5. CANCEL REQUEST cancels the cloud request (independent of SIM call).
+///  2. Real-time WebSocket connects to SmartDial coordination bus.
+///  3. If reciprocal calling detected: receives DECISION_RESOLVED event.
+///     - PROCEED: Gated SIM call automatically placed/continued.
+///     - STANDBY: Outgoing attempt aborted; waits for incoming carrier call.
+///     - ASK_USER: Presents choice dialog.
+///     - BLOCK: Aborts call immediately.
 ///
 /// Voice audio path: SIM / cellular — NOT internet, NOT WebRTC.
 class CallingScreen extends StatefulWidget {
@@ -42,19 +44,148 @@ class _CallingScreenState extends State<CallingScreen> {
   bool _isCancelling    = false;
   String? _activeCallId;
 
+  String? _decisionAction;
+  String? _decisionReason;
+
   StreamSubscription<CallEvent>? _eventSub;
+  StreamSubscription<Map<String, dynamic>>? _reciprocalWsSub;
+  StreamSubscription<Map<String, dynamic>>? _decisionWsSub;
 
   @override
   void initState() {
     super.initState();
     _request = widget.initialRequest;
     _subscribeCallEvents();
+    _subscribeWebSocketEvents();
   }
 
   @override
   void dispose() {
     _eventSub?.cancel();
+    _reciprocalWsSub?.cancel();
+    _decisionWsSub?.cancel();
     super.dispose();
+  }
+
+  void _subscribeWebSocketEvents() {
+    WebSocketService.instance.connect();
+
+    _reciprocalWsSub = WebSocketService.instance.reciprocalStream.listen((event) {
+      if (!mounted) return;
+      final pairId = event['pair_id'] as String?;
+      if (pairId != null) {
+        setState(() {
+          _request = _request.copyWith(
+            reciprocalFlag: true,
+            pairId: pairId,
+          );
+        });
+      }
+    });
+
+    _decisionWsSub = WebSocketService.instance.decisionStream.listen((event) {
+      if (!mounted) return;
+      final action = event['action'] as String?;
+      final pairId = event['pair_id'] as String?;
+      final reason = event['reason_code'] as String?;
+
+      if (action != null) {
+        setState(() {
+          _decisionAction = action;
+          _decisionReason = reason;
+        });
+        _handleDecisionAction(action, pairId ?? _request.pairId ?? '');
+      }
+    });
+  }
+
+  void _handleDecisionAction(String action, String pairId) {
+    if (action == 'PROCEED') {
+      if (!_simCallStarted && !_isPlacingCall) {
+        _placeSIMCall();
+      }
+    } else if (action == 'STANDBY') {
+      if (_activeCallId != null) {
+        TelecomService.endCall(_activeCallId!);
+      }
+    } else if (action == 'BLOCK') {
+      if (_activeCallId != null) {
+        TelecomService.endCall(_activeCallId!);
+      }
+      _cancelCloudRequest();
+    } else if (action == 'ASK_USER') {
+      _showAskUserModal(pairId);
+    }
+  }
+
+  void _showAskUserModal(String pairId) {
+    showModalBottomSheet(
+      context: context,
+      isDismissible: false,
+      enableDrag: false,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const Row(
+              children: [
+                Icon(Icons.compare_arrows, color: Colors.purple, size: 28),
+                SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    'Simultaneous Call Detected',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Text(
+              'Both of you are calling each other right now. Who should place the cellular call?',
+              style: TextStyle(color: Colors.grey.shade700, fontSize: 14),
+            ),
+            const SizedBox(height: 20),
+            ElevatedButton.icon(
+              onPressed: () {
+                Navigator.pop(ctx);
+                ApiClient.respondToDecision(pairId: pairId, action: 'ALLOW_A_TO_B');
+              },
+              icon: const Icon(Icons.call_made),
+              label: const Text('I will place the call'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.green.shade600,
+                foregroundColor: Colors.white,
+              ),
+            ),
+            const SizedBox(height: 8),
+            OutlinedButton.icon(
+              onPressed: () {
+                Navigator.pop(ctx);
+                ApiClient.respondToDecision(pairId: pairId, action: 'ALLOW_B_TO_A');
+              },
+              icon: const Icon(Icons.call_received),
+              label: const Text('Let them call me (Standby)'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: Colors.blue.shade700,
+              ),
+            ),
+            const SizedBox(height: 8),
+            TextButton(
+              onPressed: () {
+                Navigator.pop(ctx);
+                ApiClient.respondToDecision(pairId: pairId, action: 'BLOCK');
+              },
+              child: Text('Cancel Both Calls', style: TextStyle(color: Colors.red.shade700)),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   void _subscribeCallEvents() {
@@ -264,6 +395,75 @@ class _CallingScreenState extends State<CallingScreen> {
                     const SizedBox(height: 6),
                     _InfoRow('Pair', _request.pairId!,
                         mono: true, color: Colors.purple.shade700),
+                  ],
+                ),
+              ),
+
+            // Reciprocal Decision Status
+            if (_decisionAction != null)
+              Container(
+                margin: const EdgeInsets.only(top: 8),
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: _decisionAction == 'PROCEED'
+                      ? Colors.green.shade50
+                      : (_decisionAction == 'STANDBY'
+                          ? Colors.orange.shade50
+                          : Colors.purple.shade50),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                    color: _decisionAction == 'PROCEED'
+                        ? Colors.green.shade400
+                        : (_decisionAction == 'STANDBY'
+                            ? Colors.orange.shade400
+                            : Colors.purple.shade400),
+                  ),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(
+                          _decisionAction == 'PROCEED'
+                              ? Icons.check_circle
+                              : (_decisionAction == 'STANDBY'
+                                  ? Icons.phone_callback
+                                  : Icons.info_outline),
+                          color: _decisionAction == 'PROCEED'
+                              ? Colors.green.shade700
+                              : (_decisionAction == 'STANDBY'
+                                  ? Colors.orange.shade800
+                                  : Colors.purple.shade700),
+                          size: 18,
+                        ),
+                        const SizedBox(width: 6),
+                        Text(
+                          'DECISION: $_decisionAction',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: _decisionAction == 'PROCEED'
+                                ? Colors.green.shade900
+                                : (_decisionAction == 'STANDBY'
+                                    ? Colors.orange.shade900
+                                    : Colors.purple.shade900),
+                            fontSize: 13,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      _decisionAction == 'PROCEED'
+                          ? 'SmartDial elected your phone to place the cellular call.'
+                          : (_decisionAction == 'STANDBY'
+                              ? 'The other party was elected to dial. Standing by to receive.'
+                              : 'Policy reason: $_decisionReason'),
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.grey.shade800,
+                      ),
+                    ),
                   ],
                 ),
               ),
