@@ -12,7 +12,7 @@ class AppConstants {
   /// Change this one value to target a different backend.
   static const String baseUrl = String.fromEnvironment(
     'API_BASE_URL',
-    defaultValue: 'http://127.0.0.1:8000', // ADB reverse USB -> host machine
+    defaultValue: 'https://smart-dial.onrender.com', // Live Render Cloud Backend
   );
 
   // JWT storage key
@@ -22,7 +22,8 @@ class AppConstants {
   static String get wsUrl {
     final uri = Uri.parse(baseUrl);
     final wsScheme = uri.scheme == 'https' ? 'wss' : 'ws';
-    return '$wsScheme://${uri.host}:${uri.port}/ws/calls';
+    final portStr = (uri.hasPort && uri.port != 80 && uri.port != 443) ? ':${uri.port}' : '';
+    return '$wsScheme://${uri.host}$portStr/ws/calls';
   }
 
   // App name
