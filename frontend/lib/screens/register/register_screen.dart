@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
+import '../../core/api/api_client.dart';
+import '../../core/constants/app_theme.dart';
+import '../../core/widgets/smart_widgets.dart';
 import '../../services/auth_service.dart';
 
-/// Register screen — creates an account via POST /api/auth/register
-/// and then navigates to Login on success.
+/// Register Screen — Matches Figma Screen 2B (Authentication / Register)
+/// Live connection to Render Cloud Backend.
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
 
@@ -19,6 +22,31 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
   bool _isLoading = false;
   bool _obscurePassword = true;
+  String _selectedCountryCode = '+91';
+
+  // Live Backend status indicator
+  String _backendStatus = 'Checking...';
+  Color _backendStatusColor = AppColors.amber;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkBackend();
+  }
+
+  Future<void> _checkBackend() async {
+    final result = await ApiClient.health();
+    if (!mounted) return;
+    setState(() {
+      if (result.isSuccess) {
+        _backendStatus = 'Render Online';
+        _backendStatusColor = AppColors.green;
+      } else {
+        _backendStatus = 'Connecting...';
+        _backendStatusColor = AppColors.amber;
+      }
+    });
+  }
 
   @override
   void dispose() {
@@ -34,10 +62,24 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
     setState(() => _isLoading = true);
 
+    final phoneRaw = _phoneController.text.trim();
+    final fullPhone = phoneRaw.startsWith('+')
+        ? phoneRaw
+        : '$_selectedCountryCode${phoneRaw.replaceAll(RegExp(r'\D'), '')}';
+
+    final emailInput = _emailController.text.trim();
+    final String email;
+    if (emailInput.isNotEmpty) {
+      email = emailInput;
+    } else {
+      final digits = fullPhone.replaceAll(RegExp(r'\D'), '');
+      email = '$digits@smartdial.com';
+    }
+
     final error = await AuthService.register(
       name: _nameController.text.trim(),
-      email: _emailController.text.trim(),
-      phone: _phoneController.text.trim(),
+      email: email,
+      phone: fullPhone,
       password: _passwordController.text,
     );
 
@@ -46,15 +88,22 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
     if (error != null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(error), backgroundColor: Colors.red.shade700),
+        SnackBar(
+          content: Text(error),
+          backgroundColor: AppColors.red,
+          behavior: SnackBarBehavior.floating,
+          duration: const Duration(seconds: 5),
+        ),
       );
       return;
     }
 
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
-        content: Text('Account created! Please sign in.'),
-        backgroundColor: Colors.green,
+        content: Text('Account created on Render Cloud! Please sign in.'),
+        backgroundColor: AppColors.green,
+        behavior: SnackBarBehavior.floating,
+        duration: Duration(seconds: 3),
       ),
     );
     Navigator.pushReplacementNamed(context, '/login');
@@ -63,143 +112,393 @@ class _RegisterScreenState extends State<RegisterScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: SafeArea(
-        child: Center(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.symmetric(horizontal: 32),
-            child: Form(
-              key: _formKey,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
+      backgroundColor: AppColors.background,
+      appBar: AppBar(
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back, color: AppColors.textPrimary),
+          onPressed: () => Navigator.pushReplacementNamed(context, '/login'),
+        ),
+        title: const Text(
+          'SmartDial Account',
+          style: TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.w600,
+            color: AppColors.textPrimary,
+          ),
+        ),
+        actions: [
+          GestureDetector(
+            onTap: _checkBackend,
+            child: Container(
+              margin: const EdgeInsets.only(right: 16),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              decoration: BoxDecoration(
+                color: _backendStatusColor.withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: _backendStatusColor, width: 1),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Icon(Icons.person_add_outlined,
-                      size: 56, color: Colors.blue),
-                  const SizedBox(height: 12),
-                  const Text(
-                    'Create Account',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                        fontSize: 26, fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 4),
+                  Icon(Icons.circle, size: 7, color: _backendStatusColor),
+                  const SizedBox(width: 5),
                   Text(
-                    'Join SmartDial',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(color: Colors.grey.shade600),
-                  ),
-                  const SizedBox(height: 32),
-
-                  // Name
-                  TextFormField(
-                    controller: _nameController,
-                    textCapitalization: TextCapitalization.words,
-                    decoration: const InputDecoration(
-                      labelText: 'Full Name',
-                      prefixIcon: Icon(Icons.person_outline),
-                      border: OutlineInputBorder(),
+                    _backendStatus,
+                    style: TextStyle(
+                      color: _backendStatusColor,
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
                     ),
-                    validator: (v) =>
-                        (v == null || v.trim().isEmpty)
-                            ? 'Name is required'
-                            : null,
                   ),
-                  const SizedBox(height: 14),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+      body: SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+          child: Form(
+            key: _formKey,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const SizedBox(height: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: AppColors.cyan.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: const Text(
+                    'CONNECTED BY DESIGN',
+                    style: TextStyle(
+                      color: AppColors.cyan,
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 0.8,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
 
-                  // Email
-                  TextFormField(
+                const Text(
+                  'Register Phone',
+                  style: TextStyle(
+                    fontSize: 28,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                const Text(
+                  'One account. Smarter connections. Bind your number to start calling in sync.',
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: AppColors.textSecondary,
+                    height: 1.4,
+                  ),
+                ),
+                const SizedBox(height: 24),
+
+                // Full Name
+                const Text(
+                  'Full Name',
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: AppColors.textSecondary,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Container(
+                  decoration: BoxDecoration(
+                    color: AppColors.surface,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: AppColors.border),
+                  ),
+                  child: TextFormField(
+                    controller: _nameController,
+                    style: const TextStyle(color: AppColors.textPrimary),
+                    decoration: const InputDecoration(
+                      border: InputBorder.none,
+                      prefixIcon: Icon(Icons.person_outline,
+                          size: 18, color: AppColors.textMuted),
+                      hintText: 'Enter your full name',
+                      hintStyle: TextStyle(color: AppColors.textMuted),
+                    ),
+                    validator: (v) {
+                      if (v == null || v.trim().isEmpty) {
+                        return 'Full name is required';
+                      }
+                      return null;
+                    },
+                  ),
+                ),
+                const SizedBox(height: 16),
+
+                // Email Address
+                const Text(
+                  'Email Address',
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: AppColors.textSecondary,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Container(
+                  decoration: BoxDecoration(
+                    color: AppColors.surface,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: AppColors.border),
+                  ),
+                  child: TextFormField(
                     controller: _emailController,
                     keyboardType: TextInputType.emailAddress,
+                    style: const TextStyle(color: AppColors.textPrimary),
                     decoration: const InputDecoration(
-                      labelText: 'Email',
-                      prefixIcon: Icon(Icons.email_outlined),
-                      border: OutlineInputBorder(),
+                      border: InputBorder.none,
+                      prefixIcon: Icon(Icons.email_outlined,
+                          size: 18, color: AppColors.textMuted),
+                      hintText: 'youremail@gmail.com',
+                      hintStyle: TextStyle(color: AppColors.textMuted),
                     ),
                     validator: (v) {
-                      if (v == null || v.trim().isEmpty) {
-                        return 'Email is required';
-                      }
-                      if (!v.contains('@')) return 'Enter a valid email';
-                      return null;
-                    },
-                  ),
-                  const SizedBox(height: 14),
-
-                  // Phone
-                  TextFormField(
-                    controller: _phoneController,
-                    keyboardType: TextInputType.phone,
-                    decoration: const InputDecoration(
-                      labelText: 'Phone Number',
-                      prefixIcon: Icon(Icons.phone_outlined),
-                      border: OutlineInputBorder(),
-                    ),
-                    validator: (v) {
-                      if (v == null || v.trim().isEmpty) {
-                        return 'Phone is required';
-                      }
-                      if (v.trim().length < 7) {
-                        return 'Phone number is too short';
+                      if (v != null && v.trim().isNotEmpty && !v.contains('@')) {
+                        return 'Enter a valid email address';
                       }
                       return null;
                     },
                   ),
-                  const SizedBox(height: 14),
+                ),
+                const SizedBox(height: 16),
 
-                  // Password
-                  TextFormField(
+                // Phone number
+                const Text(
+                  'Phone number',
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: AppColors.textSecondary,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Container(
+                  decoration: BoxDecoration(
+                    color: AppColors.surface,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: AppColors.border),
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                        child: Row(
+                          children: [
+                            Text(
+                              _selectedCountryCode == '+91' ? '🇮🇳' : '🇺🇸',
+                              style: const TextStyle(fontSize: 16),
+                            ),
+                            const SizedBox(width: 4),
+                            DropdownButton<String>(
+                              value: _selectedCountryCode,
+                              underline: const SizedBox(),
+                              dropdownColor: AppColors.surfaceElevated,
+                              icon: const Icon(Icons.keyboard_arrow_down,
+                                  color: AppColors.textSecondary, size: 18),
+                              style: const TextStyle(
+                                color: AppColors.textPrimary,
+                                fontWeight: FontWeight.w600,
+                              ),
+                              items: const [
+                                DropdownMenuItem(value: '+91', child: Text('+91')),
+                                DropdownMenuItem(value: '+1', child: Text('+1')),
+                              ],
+                              onChanged: (val) {
+                                if (val != null) setState(() => _selectedCountryCode = val);
+                              },
+                            ),
+                          ],
+                        ),
+                      ),
+                      Container(width: 1, height: 28, color: AppColors.border),
+                      const SizedBox(width: 8),
+                      const Icon(Icons.phone_android_outlined,
+                          size: 18, color: AppColors.textMuted),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: TextFormField(
+                          controller: _phoneController,
+                          keyboardType: TextInputType.phone,
+                          style: const TextStyle(color: AppColors.textPrimary),
+                          decoration: const InputDecoration(
+                            border: InputBorder.none,
+                            hintText: '98765 43210',
+                            hintStyle: TextStyle(color: AppColors.textMuted),
+                          ),
+                          validator: (v) {
+                            if (v == null || v.trim().isEmpty) {
+                              return 'Phone number is required';
+                            }
+                            if (v.trim().length < 7) {
+                              return 'Enter a valid phone number';
+                            }
+                            return null;
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+
+                // Password
+                const Text(
+                  'Password',
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: AppColors.textSecondary,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Container(
+                  decoration: BoxDecoration(
+                    color: AppColors.surface,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: AppColors.border),
+                  ),
+                  child: TextFormField(
                     controller: _passwordController,
                     obscureText: _obscurePassword,
+                    style: const TextStyle(color: AppColors.textPrimary),
                     decoration: InputDecoration(
-                      labelText: 'Password',
-                      prefixIcon: const Icon(Icons.lock_outline),
-                      border: const OutlineInputBorder(),
+                      border: InputBorder.none,
+                      prefixIcon: const Icon(Icons.key_outlined,
+                          size: 18, color: AppColors.textMuted),
+                      hintText: 'Create a password (min 8 characters)',
+                      hintStyle: const TextStyle(color: AppColors.textMuted),
                       suffixIcon: IconButton(
-                        icon: Icon(_obscurePassword
-                            ? Icons.visibility_off
-                            : Icons.visibility),
-                        onPressed: () => setState(
-                            () => _obscurePassword = !_obscurePassword),
+                        icon: Icon(
+                          _obscurePassword
+                              ? Icons.visibility_outlined
+                              : Icons.visibility_off_outlined,
+                          color: AppColors.textMuted,
+                          size: 20,
+                        ),
+                        onPressed: () =>
+                            setState(() => _obscurePassword = !_obscurePassword),
                       ),
                     ),
                     validator: (v) {
-                      if (v == null || v.isEmpty) return 'Password is required';
-                      if (v.length < 8) {
+                      if (v == null || v.length < 8) {
                         return 'Password must be at least 8 characters';
                       }
                       return null;
                     },
                   ),
-                  const SizedBox(height: 28),
+                ),
+                const SizedBox(height: 20),
 
-                  // Register button
-                  SizedBox(
-                    height: 48,
-                    child: ElevatedButton(
-                      onPressed: _isLoading ? null : _register,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.blue.shade700,
-                        foregroundColor: Colors.white,
+                const SimVerifiedCard(),
+                const SizedBox(height: 24),
+
+                // Continue Button
+                SizedBox(
+                  width: double.infinity,
+                  height: 52,
+                  child: ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.primary,
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
                       ),
-                      child: _isLoading
-                          ? const SizedBox(
-                              height: 20,
-                              width: 20,
-                              child: CircularProgressIndicator(
-                                  strokeWidth: 2, color: Colors.white),
-                            )
-                          : const Text('Create Account',
-                              style: TextStyle(fontSize: 16)),
+                      elevation: 4,
+                      shadowColor: AppColors.primary.withValues(alpha: 0.5),
+                    ),
+                    onPressed: _isLoading ? null : _register,
+                    child: _isLoading
+                        ? Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: const [
+                              SizedBox(
+                                width: 20,
+                                height: 20,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: Colors.white,
+                                ),
+                              ),
+                              SizedBox(width: 12),
+                              Text(
+                                'Registering on Render Cloud...',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  color: Colors.white,
+                                ),
+                              ),
+                            ],
+                          )
+                        : const Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(Icons.arrow_forward, size: 20),
+                              SizedBox(width: 8),
+                              Text(
+                                'Continue',
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ],
+                          ),
+                  ),
+                ),
+                const SizedBox(height: 20),
+
+                Center(
+                  child: GestureDetector(
+                    onTap: () => Navigator.pushReplacementNamed(context, '/login'),
+                    child: RichText(
+                      text: const TextSpan(
+                        text: 'Already have an account? ',
+                        style: TextStyle(
+                            color: AppColors.textSecondary, fontSize: 13),
+                        children: [
+                          TextSpan(
+                            text: 'Sign In',
+                            style: TextStyle(
+                              color: AppColors.cyan,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
-                  const SizedBox(height: 16),
+                ),
+                const SizedBox(height: 32),
 
-                  TextButton(
-                    onPressed: () =>
-                        Navigator.pushReplacementNamed(context, '/login'),
-                    child: const Text('Already have an account? Sign in'),
+                const Center(
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.shield_outlined,
+                          size: 14, color: AppColors.textMuted),
+                      SizedBox(width: 6),
+                      Text(
+                        'Secure SIM binding. Live on Render Cloud.',
+                        style: TextStyle(fontSize: 11, color: AppColors.textMuted),
+                      ),
+                    ],
                   ),
-                ],
-              ),
+                ),
+                const SizedBox(height: 16),
+              ],
             ),
           ),
         ),

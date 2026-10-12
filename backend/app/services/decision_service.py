@@ -60,6 +60,14 @@ def _broadcast_decision_resolved(decision: CommunicationDecision, pair: Reciproc
             else:
                 return "ASK_USER"
 
+        def get_user_message(user_id: int) -> str:
+            action = get_user_action(user_id)
+            if action == "STANDBY":
+                return "The person you are trying to call is already calling you"
+            elif action == "PROCEED":
+                return "Your call is connecting as the primary call"
+            return ""
+
         base_event = {
             "event": "DECISION_RESOLVED",
             "pair_id": decision.pair_id,
@@ -72,11 +80,19 @@ def _broadcast_decision_resolved(decision: CommunicationDecision, pair: Reciproc
 
         manager.publish_to_user_threadsafe(
             user_a_id,
-            {**base_event, "action": get_user_action(user_a_id)},
+            {
+                **base_event,
+                "action": get_user_action(user_a_id),
+                "message": get_user_message(user_a_id),
+            },
         )
         manager.publish_to_user_threadsafe(
             user_b_id,
-            {**base_event, "action": get_user_action(user_b_id)},
+            {
+                **base_event,
+                "action": get_user_action(user_b_id),
+                "message": get_user_message(user_b_id),
+            },
         )
     except Exception:
         pass
@@ -161,6 +177,18 @@ def evaluate_decision(
     try:
         db.commit()
         db.refresh(decision)
+        try:
+            from app.mongodb import save_decision
+            save_decision({
+                "decision_id": decision.decision_id,
+                "pair_id": decision.pair_id,
+                "decision_type": decision.decision_type.value,
+                "selected_request_id": decision.selected_request_id,
+                "reason_code": decision.reason_code.value,
+                "status": decision.status.value,
+            })
+        except Exception:
+            pass
         _broadcast_decision_resolved(decision, pair)
         return decision
     except IntegrityError:

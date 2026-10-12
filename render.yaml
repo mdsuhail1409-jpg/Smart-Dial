@@ -16,3 +16,5 @@ services:
         value: HS256
       - key: ACCESS_TOKEN_EXPIRE_MINUTES
         value: "43200"
+      - key: MONGODB_URL
+        value: "mongodb+srv://suhailzia14_db_user:hnxlZb7w4Ov86nNA@smart-dial.n7jazjh.mongodb.net/smartdial?retryWrites=true&w=majority&appName=Smart-Dial"

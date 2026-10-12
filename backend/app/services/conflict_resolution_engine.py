@@ -187,9 +187,12 @@ def resolve(
             reason_code      = ReasonCode.USER_PREFERENCE,
         )
 
-    # ── Priority 7: Default — ask the user ───────────────────────────────────
+    # ── Priority 7: Default — Fastest Call Executed Automatically ─────────────
+    # When Person A calls Person B and Person B calls Person A without manual preference,
+    # the fastest dialer (request_a, earliest timestamp) is executed automatically.
+    # User A proceeds with their call; User B is placed on STANDBY to receive it.
     return ResolutionResult(
-        decision_type    = DecisionType.ASK_USER,
-        selected_request = None,
+        decision_type    = DecisionType.ALLOW_A_TO_B,
+        selected_request = request_a,
         reason_code      = ReasonCode.DEFAULT_POLICY,
     )

@@ -9,7 +9,8 @@ from functools import lru_cache
 
 class Settings(BaseSettings):
     # Database
-    DATABASE_URL: str
+    DATABASE_URL: str = "sqlite:///./smartdial.db"
+    MONGODB_URL: str = "mongodb+srv://suhailzia14_db_user:hnxlZb7w4Ov86nNA@smart-dial.n7jazjh.mongodb.net/smartdial?retryWrites=true&w=majority&appName=Smart-Dial"
 
     # JWT
     JWT_SECRET_KEY: str

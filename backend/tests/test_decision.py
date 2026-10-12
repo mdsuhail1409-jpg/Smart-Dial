@@ -152,18 +152,18 @@ def test_priority_6_prefer_incoming_user_b(client):
     assert data["decision_type"] == "ALLOW_A_TO_B"
 
 
-# ── Priority 7: Default Policy ────────────────────────────────────────────────
+# ── Priority 7: Default Policy (Fastest Call Execution) ────────────────────────
 
-def test_priority_7_default_ask_user(client):
-    """Default preferences -> ASK_USER / DEFAULT_POLICY."""
+def test_priority_7_default_fastest_call(client):
+    """Default preferences -> execute fastest call automatically (ALLOW_A_TO_B)."""
     pair_id, tok_a, _ = _setup_pair(client)
 
     r = client.post(f"/api/reciprocal-pairs/{pair_id}/decision", headers=_auth(tok_a))
     assert r.status_code == 200
     data = r.json()
-    assert data["decision_type"] == "ASK_USER"
+    assert data["decision_type"] == "ALLOW_A_TO_B"
     assert data["reason_code"] == "DEFAULT_POLICY"
-    assert data["selected_request_id"] is None
+    assert data["selected_request_id"] is not None
 
 
 # ── Idempotency & Retrieval ───────────────────────────────────────────────────

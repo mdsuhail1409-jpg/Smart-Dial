@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'core/constants/app_theme.dart';
 import 'screens/splash/splash_screen.dart';
 import 'screens/login/login_screen.dart';
 import 'screens/register/register_screen.dart';
@@ -16,10 +17,7 @@ class SmartDialApp extends StatelessWidget {
     return MaterialApp(
       title: 'SmartDial',
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
-        useMaterial3: true,
-      ),
+      theme: AppTheme.darkTheme,
       initialRoute: '/',
       routes: {
         '/': (_) => const SplashScreen(),

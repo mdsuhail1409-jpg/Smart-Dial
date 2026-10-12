@@ -37,13 +37,20 @@ class ApiClient {
         'Content-Type': 'application/json',
       };
 
+  static const Duration _timeout = Duration(seconds: 45);
+
   /// Parse the error detail from a FastAPI error response.
   static String _errorDetail(http.Response response) {
     try {
       final body = jsonDecode(response.body) as Map<String, dynamic>;
       final detail = body['detail'];
       if (detail is String) return detail;
-      if (detail is List) return detail.map((e) => e['msg']).join(', ');
+      if (detail is List) {
+        return detail.map((e) {
+          if (e is Map && e.containsKey('msg')) return e['msg'].toString();
+          return e.toString();
+        }).join('\n');
+      }
       return 'Unexpected error (${response.statusCode})';
     } catch (_) {
       return 'Unexpected error (${response.statusCode})';
@@ -57,7 +64,7 @@ class ApiClient {
     try {
       final response = await http
           .get(Uri.parse('$_base/health'))
-          .timeout(const Duration(seconds: 10));
+          .timeout(_timeout);
       if (response.statusCode == 200) {
         return ApiResult.success(jsonDecode(response.body) as Map<String, dynamic>);
       }
@@ -86,7 +93,7 @@ class ApiClient {
               'password': password,
             }),
           )
-          .timeout(const Duration(seconds: 15));
+          .timeout(_timeout);
 
       if (response.statusCode == 201) {
         return ApiResult.success(jsonDecode(response.body) as Map<String, dynamic>);
@@ -109,7 +116,7 @@ class ApiClient {
             headers: _jsonHeaders(),
             body: jsonEncode({'email': email, 'password': password}),
           )
-          .timeout(const Duration(seconds: 15));
+          .timeout(_timeout);
 
       if (response.statusCode == 200) {
         return ApiResult.success(jsonDecode(response.body) as Map<String, dynamic>);
@@ -128,7 +135,7 @@ class ApiClient {
             Uri.parse('$_base/api/users'),
             headers: await _authHeaders(),
           )
-          .timeout(const Duration(seconds: 15));
+          .timeout(_timeout);
 
       if (response.statusCode == 200) {
         return ApiResult.success(jsonDecode(response.body) as Map<String, dynamic>);
@@ -154,7 +161,7 @@ class ApiClient {
             headers: await _authHeaders(),
             body: jsonEncode({'receiver_id': receiverId}),
           )
-          .timeout(const Duration(seconds: 15));
+          .timeout(_timeout);
 
       if (response.statusCode == 201) {
         return ApiResult.success(jsonDecode(response.body) as Map<String, dynamic>);
@@ -175,7 +182,7 @@ class ApiClient {
             Uri.parse('$_base/api/calls/$requestId'),
             headers: await _authHeaders(),
           )
-          .timeout(const Duration(seconds: 15));
+          .timeout(_timeout);
 
       if (response.statusCode == 200) {
         return ApiResult.success(jsonDecode(response.body) as Map<String, dynamic>);
@@ -196,7 +203,7 @@ class ApiClient {
       );
       final response = await http
           .get(uri, headers: await _authHeaders())
-          .timeout(const Duration(seconds: 15));
+          .timeout(_timeout);
 
       if (response.statusCode == 200) {
         return ApiResult.success(jsonDecode(response.body) as Map<String, dynamic>);
@@ -217,7 +224,7 @@ class ApiClient {
             Uri.parse('$_base/api/calls/$requestId/cancel'),
             headers: await _authHeaders(),
           )
-          .timeout(const Duration(seconds: 15));
+          .timeout(_timeout);
 
       if (response.statusCode == 200) {
         return ApiResult.success(jsonDecode(response.body) as Map<String, dynamic>);
@@ -240,7 +247,7 @@ class ApiClient {
             headers: await _authHeaders(),
             body: jsonEncode({'action': action}),
           )
-          .timeout(const Duration(seconds: 15));
+          .timeout(_timeout);
 
       if (response.statusCode == 200) {
         return ApiResult.success(jsonDecode(response.body) as Map<String, dynamic>);
@@ -259,7 +266,7 @@ class ApiClient {
             Uri.parse('$_base/api/reciprocal-pairs/$pairId/decision'),
             headers: await _authHeaders(),
           )
-          .timeout(const Duration(seconds: 15));
+          .timeout(_timeout);
 
       if (response.statusCode == 200) {
         return ApiResult.success(jsonDecode(response.body) as Map<String, dynamic>);
@@ -278,7 +285,7 @@ class ApiClient {
             Uri.parse('$_base/api/reciprocal-pairs'),
             headers: await _authHeaders(),
           )
-          .timeout(const Duration(seconds: 15));
+          .timeout(_timeout);
 
       if (response.statusCode == 200) {
         final body = jsonDecode(response.body) as Map<String, dynamic>;
@@ -299,7 +306,7 @@ class ApiClient {
             Uri.parse('$_base/api/users/me'),
             headers: await _authHeaders(),
           )
-          .timeout(const Duration(seconds: 15));
+          .timeout(_timeout);
 
       if (response.statusCode == 200) {
         return ApiResult.success(jsonDecode(response.body) as Map<String, dynamic>);
@@ -330,7 +337,7 @@ class ApiClient {
             headers: await _authHeaders(),
             body: jsonEncode(body),
           )
-          .timeout(const Duration(seconds: 15));
+          .timeout(_timeout);
 
       if (response.statusCode == 200) {
         return ApiResult.success(jsonDecode(response.body) as Map<String, dynamic>);

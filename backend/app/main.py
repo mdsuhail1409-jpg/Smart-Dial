@@ -18,15 +18,32 @@ Routes:
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.database import Base, engine
+from contextlib import asynccontextmanager
+
+from app.database import Base, engine, SessionLocal
 from app.routers import auth, users, calls, reciprocal, decision, websocket
+from app.mongodb import get_mongo_client, sync_from_mongo_to_db
 
 Base.metadata.create_all(bind=engine)
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup: sync users from MongoDB Atlas into local session if needed
+    try:
+        db = SessionLocal()
+        sync_from_mongo_to_db(db)
+        db.close()
+    except Exception as exc:
+        print(f"MongoDB startup sync notice: {exc}")
+    yield
+
 
 app = FastAPI(
     title="SmartDial API",
     description="Smart Reciprocal Call Coordination System",
-    version="0.5.0",
+    version="0.5.1",
+    lifespan=lifespan,
 )
 
 # CORS — open for development; tighten for production
@@ -50,4 +67,12 @@ app.include_router(websocket.router)
 # ── Health check ─────────────────────────────────────────────────────────────
 @app.get("/health", tags=["health"], summary="Health check")
 def health_check() -> dict:
-    return {"status": "ok", "service": "SmartDial API"}
+    mongo_ok = get_mongo_client() is not None
+    return {
+        "status": "ok",
+        "service": "SmartDial API",
+        "version": "0.5.1",
+        "database": "mongodb_atlas" if mongo_ok else "sqlite",
+        "mongodb_connected": mongo_ok,
+    }
+

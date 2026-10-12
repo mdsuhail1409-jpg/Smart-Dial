@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
+import '../../core/constants/app_theme.dart';
+import '../../core/widgets/smart_widgets.dart';
 import '../../services/auth_service.dart';
 
 /// Splash screen shown on launch.
-/// Checks for a stored JWT and navigates to Home or Login accordingly.
+/// Matches Figma Screen 1: Radar scanner, Hexagon Infinity Logo, v0.3.0 Engine.
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
 
@@ -18,7 +20,7 @@ class _SplashScreenState extends State<SplashScreen> {
   }
 
   Future<void> _checkAuth() async {
-    // Small delay so the splash is visible
+    // 800ms delay so splash is visible and timer completes cleanly
     await Future.delayed(const Duration(milliseconds: 800));
     if (!mounted) return;
 
@@ -31,36 +33,80 @@ class _SplashScreenState extends State<SplashScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.blue.shade700,
-      body: Center(
+      backgroundColor: AppColors.background,
+      body: SafeArea(
         child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(Icons.phone_in_talk, size: 72, color: Colors.white),
-            const SizedBox(height: 16),
+            const Spacer(),
+            // Radar pulse with glowing hexagon logo
+            Center(
+              child: RadarPulseWidget(
+                size: 260,
+                child: const SmartDialHexagonLogo(size: 88),
+              ),
+            ),
+            const SizedBox(height: 32),
             const Text(
               'SmartDial',
               style: TextStyle(
-                fontSize: 36,
+                fontSize: 32,
                 fontWeight: FontWeight.bold,
-                color: Colors.white,
-                letterSpacing: 2,
+                color: AppColors.textPrimary,
+                letterSpacing: 0.5,
               ),
             ),
             const SizedBox(height: 8),
-            Text(
-              'Smart Reciprocal Call Coordination',
+            const Text(
+              'Intelligent Cellular & Collision-Free Calling',
               style: TextStyle(
-                fontSize: 13,
-                color: Colors.white.withValues(alpha: 0.85),
+                fontSize: 14,
+                color: AppColors.textSecondary,
+                letterSpacing: 0.2,
               ),
             ),
-            const SizedBox(height: 48),
-            const CircularProgressIndicator(
-              valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+            const Spacer(),
+            // Bottom 3 dots & status indicator
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                _buildDot(0.4),
+                const SizedBox(width: 6),
+                _buildDot(1.0),
+                const SizedBox(width: 6),
+                _buildDot(0.4),
+              ],
             ),
+            const SizedBox(height: 12),
+            const Text(
+              'Initializing telecom registry & SIM binding...',
+              style: TextStyle(
+                fontSize: 12,
+                color: AppColors.textSecondary,
+              ),
+            ),
+            const SizedBox(height: 6),
+            const Text(
+              'v0.3.0 Engine',
+              style: TextStyle(
+                fontSize: 11,
+                color: AppColors.textMuted,
+                letterSpacing: 0.5,
+              ),
+            ),
+            const SizedBox(height: 24),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildDot(double opacity) {
+    return Container(
+      width: 5,
+      height: 5,
+      decoration: BoxDecoration(
+        color: AppColors.cyan.withValues(alpha: opacity),
+        shape: BoxShape.circle,
       ),
     );
   }

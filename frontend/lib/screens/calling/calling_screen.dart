@@ -1,25 +1,16 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import '../../core/api/api_client.dart';
+import '../../core/constants/app_theme.dart';
 import '../../core/models/call_request.dart';
 import '../../core/models/user.dart';
+import '../../core/widgets/smart_widgets.dart';
 import '../../services/call_service.dart';
 import '../../services/telecom_service.dart';
 import '../../services/websocket_service.dart';
 import '../incall/incall_screen.dart';
 
-/// Calling Screen — Phase 4-8
-///
-/// Shown after User A presses CALL on User B.
-///
-/// Flow:
-///  1. Cloud call intent (CR_...) already created — passed in as [initialRequest].
-///  2. Real-time WebSocket connects to SmartDial coordination bus.
-///  3. If reciprocal calling detected: receives DECISION_RESOLVED event.
-///     - PROCEED: Gated SIM call automatically placed/continued.
-///     - STANDBY: Outgoing attempt aborted; waits for incoming carrier call.
-///     - ASK_USER: Presents choice dialog.
-///     - BLOCK: Aborts call immediately.
+/// Calling Screen — Matches Figma Screens 6A, 6B, 7A, and 7B
 ///
 /// Voice audio path: SIM / cellular — NOT internet, NOT WebRTC.
 class CallingScreen extends StatefulWidget {
@@ -38,10 +29,10 @@ class CallingScreen extends StatefulWidget {
 
 class _CallingScreenState extends State<CallingScreen> {
   late CallRequest _request;
-  String _simCallState  = '';
-  bool _simCallStarted  = false;
-  bool _isPlacingCall   = false;
-  bool _isCancelling    = false;
+  String _simCallState = '';
+  bool _simCallStarted = false;
+  bool _isPlacingCall = false;
+  bool _isCancelling = false;
   String? _activeCallId;
 
   String? _decisionAction;
@@ -57,6 +48,13 @@ class _CallingScreenState extends State<CallingScreen> {
     _request = widget.initialRequest;
     _subscribeCallEvents();
     _subscribeWebSocketEvents();
+
+    // Auto-trigger cellular SIM call after 1s if no reciprocal conflict
+    Future.delayed(const Duration(milliseconds: 1200), () {
+      if (mounted && !_simCallStarted && !_isPlacingCall && _decisionAction != 'STANDBY') {
+        _placeSimCall();
+      }
+    });
   }
 
   @override
@@ -86,101 +84,214 @@ class _CallingScreenState extends State<CallingScreen> {
     _decisionWsSub = WebSocketService.instance.decisionStream.listen((event) {
       if (!mounted) return;
       final action = event['action'] as String?;
+      final reason = event['reason'] as String?;
       final pairId = event['pair_id'] as String?;
-      final reason = event['reason_code'] as String?;
 
       if (action != null) {
         setState(() {
           _decisionAction = action;
           _decisionReason = reason;
         });
-        _handleDecisionAction(action, pairId ?? _request.pairId ?? '');
+
+        if (action == 'PROCEED') {
+          _showDecisionModal(isProceed: true);
+          if (!_simCallStarted && !_isPlacingCall) {
+            _placeSimCall();
+          }
+        } else if (action == 'STANDBY') {
+          _showDecisionModal(isProceed: false);
+        } else if (action == 'ASK_USER' && pairId != null) {
+          _showAskUserSheet(pairId);
+        } else if (action == 'BLOCK') {
+          _cancelCloudRequest();
+        }
       }
     });
   }
 
-  void _handleDecisionAction(String action, String pairId) {
-    if (action == 'PROCEED') {
-      if (!_simCallStarted && !_isPlacingCall) {
-        _placeSIMCall();
-      }
-    } else if (action == 'STANDBY') {
-      if (_activeCallId != null) {
-        TelecomService.endCall(_activeCallId!);
-      }
-    } else if (action == 'BLOCK') {
-      if (_activeCallId != null) {
-        TelecomService.endCall(_activeCallId!);
-      }
-      _cancelCloudRequest();
-    } else if (action == 'ASK_USER') {
-      _showAskUserModal(pairId);
-    }
-  }
-
-  void _showAskUserModal(String pairId) {
+  void _showDecisionModal({required bool isProceed}) {
     showModalBottomSheet(
       context: context,
-      isDismissible: false,
-      enableDrag: false,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (ctx) => Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            const Row(
-              children: [
-                Icon(Icons.compare_arrows, color: Colors.purple, size: 28),
-                SizedBox(width: 12),
-                Expanded(
-                  child: Text(
-                    'Simultaneous Call Detected',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (ctx) {
+        return Container(
+          padding: const EdgeInsets.all(24),
+          decoration: const BoxDecoration(
+            color: Color(0xFF131D33),
+            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: AppColors.border,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              const SizedBox(height: 24),
+
+              // Dual Phones Synchronizing graphic (Figma 7A & 7B)
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  _buildPhoneIcon(isProceed ? AppColors.green : AppColors.cyan),
+                  const SizedBox(width: 14),
+                  Icon(
+                    Icons.sync_alt,
+                    size: 24,
+                    color: isProceed ? AppColors.green : AppColors.cyan,
+                  ),
+                  const SizedBox(width: 14),
+                  _buildPhoneIcon(isProceed ? AppColors.green : AppColors.cyan),
+                ],
+              ),
+              const SizedBox(height: 20),
+
+              const Text(
+                'Simultaneous Call Detected',
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white,
+                ),
+              ),
+              const SizedBox(height: 12),
+
+              // Action Badge
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                decoration: BoxDecoration(
+                  color: (isProceed ? AppColors.green : AppColors.cyan)
+                      .withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(
+                    color: isProceed ? AppColors.green : AppColors.cyan,
                   ),
                 ),
-              ],
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      isProceed ? Icons.check_circle : Icons.phone_callback,
+                      size: 14,
+                      color: isProceed ? AppColors.green : AppColors.cyan,
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      isProceed ? 'ACTION: PROCEED' : 'ACTION: STANDBY',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                        color: isProceed ? AppColors.green : AppColors.cyan,
+                        letterSpacing: 0.5,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+
+              Text(
+                isProceed
+                    ? "SmartDial executed the fastest call: Your call to ${widget.receiver.name} was initiated first and is connecting now."
+                    : "The person you are trying to call is already calling you.\n\nYour outgoing call is on hold—please answer ${widget.receiver.name}'s incoming call!",
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w500,
+                  color: Colors.white,
+                  height: 1.4,
+                ),
+              ),
+              const SizedBox(height: 28),
+
+              SizedBox(
+                width: double.infinity,
+                height: 48,
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: isProceed ? AppColors.green : AppColors.cyan,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  onPressed: () => Navigator.pop(ctx),
+                  child: const Text(
+                    'Got it / Continue',
+                    style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildPhoneIcon(Color color) {
+    return Container(
+      width: 32,
+      height: 48,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: color, width: 2),
+      ),
+      child: Center(
+        child: Container(
+          width: 4,
+          height: 4,
+          decoration: BoxDecoration(shape: BoxShape.circle, color: color),
+        ),
+      ),
+    );
+  }
+
+  void _showAskUserSheet(String pairId) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => Container(
+        padding: const EdgeInsets.all(24),
+        decoration: const BoxDecoration(
+          color: Color(0xFF131D33),
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text(
+              'Call Collision Detected',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white),
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 8),
             Text(
-              'Both of you are calling each other right now. Who should place the cellular call?',
-              style: TextStyle(color: Colors.grey.shade700, fontSize: 14),
+              'Both you and ${widget.receiver.name} called at the exact same moment. Who should place the cellular call?',
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: AppColors.textSecondary, fontSize: 13),
             ),
             const SizedBox(height: 20),
-            ElevatedButton.icon(
+            ElevatedButton(
               onPressed: () {
                 Navigator.pop(ctx);
                 ApiClient.respondToDecision(pairId: pairId, action: 'ALLOW_A_TO_B');
               },
-              icon: const Icon(Icons.call_made),
-              label: const Text('I will place the call'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.green.shade600,
-                foregroundColor: Colors.white,
-              ),
+              style: ElevatedButton.styleFrom(backgroundColor: AppColors.green),
+              child: const Text('I will place the call'),
             ),
             const SizedBox(height: 8),
-            OutlinedButton.icon(
+            OutlinedButton(
               onPressed: () {
                 Navigator.pop(ctx);
                 ApiClient.respondToDecision(pairId: pairId, action: 'ALLOW_B_TO_A');
               },
-              icon: const Icon(Icons.call_received),
-              label: const Text('Let them call me (Standby)'),
-              style: OutlinedButton.styleFrom(
-                foregroundColor: Colors.blue.shade700,
-              ),
-            ),
-            const SizedBox(height: 8),
-            TextButton(
-              onPressed: () {
-                Navigator.pop(ctx);
-                ApiClient.respondToDecision(pairId: pairId, action: 'BLOCK');
-              },
-              child: Text('Cancel Both Calls', style: TextStyle(color: Colors.red.shade700)),
+              child: const Text('Let them call me (Standby)'),
             ),
           ],
         ),
@@ -193,40 +304,35 @@ class _CallingScreenState extends State<CallingScreen> {
       (event) {
         if (!mounted) return;
         setState(() {
-          _simCallState  = event.state;
+          _simCallState = event.state;
           _simCallStarted = true;
           if (_activeCallId == null && event.event == 'CALL_ADDED') {
             _activeCallId = event.callId;
           }
         });
 
-        // Auto-navigate to InCallScreen once the call is added or active
         if ((event.event == 'CALL_ADDED' || event.isActive) && _activeCallId != null) {
           _navigateToInCall(event);
         }
       },
-      onError: (_) {},
     );
   }
 
   void _navigateToInCall(CallEvent event) {
-    // Navigate once — prevent duplicate navigation
     _eventSub?.cancel();
     Navigator.pushReplacement(
       context,
       MaterialPageRoute(
         builder: (_) => InCallScreen(
-          callId:       event.callId,
-          contactName:  widget.receiver.name,
-          phoneNumber:  widget.receiver.phone,
+          callId: event.callId,
+          contactName: widget.receiver.name,
+          phoneNumber: widget.receiver.phone,
           initialState: event.state,
-          direction:    event.direction,
+          direction: event.direction,
         ),
       ),
     );
   }
-
-  // ── Cancel cloud request ──────────────────────────────────────────────────
 
   Future<void> _cancelCloudRequest() async {
     setState(() => _isCancelling = true);
@@ -237,377 +343,249 @@ class _CallingScreenState extends State<CallingScreen> {
         _request = updated;
         _isCancelling = false;
       });
-    } on CallServiceException catch (e) {
-      if (!mounted) return;
-      setState(() => _isCancelling = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.message), backgroundColor: Colors.red.shade700),
-      );
+      Navigator.pop(context);
+    } catch (_) {
+      if (mounted) Navigator.pop(context);
     }
   }
 
-  // ── Place SIM call ────────────────────────────────────────────────────────
-
-  Future<void> _placeSIMCall() async {
-    final phone = widget.receiver.phone.trim();
-    if (phone.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('No phone number registered for this user.'),
-            backgroundColor: Colors.red),
-      );
-      return;
-    }
-
+  Future<void> _placeSimCall() async {
     setState(() => _isPlacingCall = true);
-
-    final granted = await TelecomService.requestCallPermission();
-    if (!mounted) return;
-
-    if (!granted) {
-      setState(() => _isPlacingCall = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Phone call permission is required.\n'
-            'Please grant it in Settings → App permissions.',
-          ),
-          backgroundColor: Colors.red,
-          duration: Duration(seconds: 5),
-        ),
-      );
-      return;
-    }
-
     try {
-      await TelecomService.placeCellularCall(phone);
-      if (!mounted) return;
-      setState(() {
-        _isPlacingCall  = false;
-        _simCallStarted = true;
-        _simCallState   = 'DIALING';
-      });
-    } on TelecomException catch (e) {
-      if (!mounted) return;
-      setState(() => _isPlacingCall = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('SIM call failed: ${e.message}'),
-          backgroundColor: Colors.red.shade700,
-        ),
-      );
-    }
+      await TelecomService.placeCellularCall(widget.receiver.phone);
+    } catch (_) {}
+    if (mounted) setState(() => _isPlacingCall = false);
   }
 
-  // ── Helpers ───────────────────────────────────────────────────────────────
-
-  Color get _statusColor => switch (_simCallState) {
-    'DIALING'    => Colors.blue.shade600,
-    'CONNECTING' => Colors.blue.shade500,
-    'ACTIVE'     => Colors.green.shade700,
-    'RINGING'    => Colors.indigo.shade600,
-    _            => Colors.grey.shade500,
-  };
-
-  Color get _cloudStatusColor => switch (_request.status) {
-    'PENDING'   => Colors.blue.shade700,
-    'CANCELLED' => Colors.orange.shade700,
-    'EXPIRED'   => Colors.grey.shade600,
-    _           => Colors.grey.shade600,
-  };
+  String _getInitials(String name) {
+    if (name.trim().isEmpty) return 'SD';
+    final parts = name.trim().split(' ');
+    if (parts.length >= 2) {
+      return '${parts[0][0]}${parts[1][0]}'.toUpperCase();
+    }
+    return name.substring(0, name.length >= 2 ? 2 : 1).toUpperCase();
+  }
 
   @override
   Widget build(BuildContext context) {
-    final isPending  = _request.isPending;
-    final isTerminal = !isPending;
+    final isReciprocal = _request.reciprocalFlag || _decisionAction != null;
 
     return Scaffold(
-      backgroundColor: Colors.blue.shade50,
-      appBar: AppBar(
-        title: const Text('SmartDial'),
-        backgroundColor: Colors.blue.shade700,
-        foregroundColor: Colors.white,
-        leading: BackButton(onPressed: () => Navigator.pop(context)),
-      ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(20),
+      backgroundColor: AppColors.background,
+      body: SafeArea(
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
+            const SizedBox(height: 16),
+            // Header: SmartDial Telecom Routing (Figma 6A & 6B)
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(Icons.cell_tower, color: AppColors.cyan, size: 18),
+                const SizedBox(width: 8),
+                const Text(
+                  'SmartDial Telecom Routing',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            const Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.lock_outline, size: 12, color: AppColors.textMuted),
+                SizedBox(width: 4),
+                Text(
+                  'Encrypted intent • Cellular audio',
+                  style: TextStyle(fontSize: 11, color: AppColors.textMuted),
+                ),
+              ],
+            ),
 
-            // Receiver avatar
-            Center(
-              child: CircleAvatar(
-                radius: 44,
-                backgroundColor: Colors.blue.shade100,
-                child: Text(
-                  widget.receiver.name.isNotEmpty
-                      ? widget.receiver.name[0].toUpperCase()
-                      : '?',
-                  style: TextStyle(fontSize: 36, fontWeight: FontWeight.bold,
-                      color: Colors.blue.shade800),
+            const Spacer(flex: 1),
+
+            // Center Radar Animation with Contact Avatar
+            RadarPulseWidget(
+              size: 260,
+              child: Container(
+                width: 96,
+                height: 96,
+                decoration: const BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: LinearGradient(
+                    colors: [Color(0xFF2C3E66), Color(0xFF1E283F)],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                ),
+                child: Center(
+                  child: Text(
+                    _getInitials(widget.receiver.name),
+                    style: const TextStyle(
+                      fontSize: 32,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                      letterSpacing: 1,
+                    ),
+                  ),
                 ),
               ),
             ),
-            const SizedBox(height: 12),
-            Center(child: Text(widget.receiver.name,
-                style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold))),
-            Center(child: Text(widget.receiver.phone,
-                style: TextStyle(fontSize: 14, color: Colors.grey.shade600))),
+
             const SizedBox(height: 24),
-
-            // Cloud intent card
-            _InfoCard(title: 'Cloud Intent', children: [
-              _InfoRow('Request ID', _request.requestId,
-                  mono: true, color: Colors.blue.shade800),
-              _InfoRow('Status', _request.status, color: _cloudStatusColor),
-              _InfoRow('Expires',
-                  _request.expiresAt.toLocal().toString().substring(11, 19)),
-            ]),
-            const SizedBox(height: 12),
-
-            // Reciprocal detection badge — Phase 5
-            if (_request.reciprocalFlag && _request.pairId != null)
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Colors.purple.shade50,
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: Colors.purple.shade200),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Icon(Icons.sync, color: Colors.purple.shade700, size: 18),
-                        const SizedBox(width: 6),
-                        Text(
-                          'RECIPROCAL CALL DETECTED',
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            color: Colors.purple.shade800,
-                            fontSize: 13,
-                            letterSpacing: 0.5,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 6),
-                    _InfoRow('Pair', _request.pairId!,
-                        mono: true, color: Colors.purple.shade700),
-                  ],
-                ),
+            Text(
+              widget.receiver.name,
+              style: const TextStyle(
+                fontSize: 26,
+                fontWeight: FontWeight.bold,
+                color: AppColors.textPrimary,
               ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              widget.receiver.phone,
+              style: const TextStyle(
+                fontSize: 15,
+                color: AppColors.textSecondary,
+              ),
+            ),
 
-            // Reciprocal Decision Status
-            if (_decisionAction != null)
-              Container(
-                margin: const EdgeInsets.only(top: 8),
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: _decisionAction == 'PROCEED'
-                      ? Colors.green.shade50
-                      : (_decisionAction == 'STANDBY'
-                          ? Colors.orange.shade50
-                          : Colors.purple.shade50),
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(
-                    color: _decisionAction == 'PROCEED'
-                        ? Colors.green.shade400
-                        : (_decisionAction == 'STANDBY'
-                            ? Colors.orange.shade400
-                            : Colors.purple.shade400),
-                  ),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Icon(
-                          _decisionAction == 'PROCEED'
-                              ? Icons.check_circle
-                              : (_decisionAction == 'STANDBY'
-                                  ? Icons.phone_callback
-                                  : Icons.info_outline),
-                          color: _decisionAction == 'PROCEED'
-                              ? Colors.green.shade700
-                              : (_decisionAction == 'STANDBY'
-                                  ? Colors.orange.shade800
-                                  : Colors.purple.shade700),
-                          size: 18,
+            const Spacer(flex: 1),
+
+            // Conditional Status Card: Normal vs Reciprocal Collision
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 24),
+              child: isReciprocal
+                  // Reciprocal Detected Card (Figma 6B)
+                  ? Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        gradient: const LinearGradient(
+                          colors: [Color(0xFF381B47), Color(0xFF221634)],
                         ),
-                        const SizedBox(width: 6),
-                        Text(
-                          'DECISION: $_decisionAction',
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            color: _decisionAction == 'PROCEED'
-                                ? Colors.green.shade900
-                                : (_decisionAction == 'STANDBY'
-                                    ? Colors.orange.shade900
-                                    : Colors.purple.shade900),
-                            fontSize: 13,
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(
+                            color: const Color(0xFF8B5CF6), width: 1.5),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: const [
+                              Icon(Icons.bolt, color: AppColors.amber, size: 18),
+                              SizedBox(width: 6),
+                              Text(
+                                'RECIPROCAL CALL DETECTED',
+                                style: TextStyle(
+                                  color: AppColors.amber,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.bold,
+                                  letterSpacing: 0.6,
+                                ),
+                              ),
+                            ],
                           ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 6),
-                    Text(
-                      _decisionAction == 'PROCEED'
-                          ? 'SmartDial elected your phone to place the cellular call.'
-                          : (_decisionAction == 'STANDBY'
-                              ? 'The other party was elected to dial. Standing by to receive.'
-                              : 'Policy reason: $_decisionReason'),
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Colors.grey.shade800,
+                          const SizedBox(height: 6),
+                          Text(
+                            _decisionAction == 'STANDBY'
+                                ? 'The person you are trying to call is already calling you'
+                                : (_decisionReason ??
+                                    'Both users dialed within window • Connecting fastest call...'),
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: _decisionAction == 'STANDBY' ? FontWeight.w600 : FontWeight.normal,
+                              color: _decisionAction == 'STANDBY' ? AppColors.cyan : AppColors.textSecondary,
+                            ),
+                          ),
+                        ],
+                      ),
+                    )
+                  // Normal Routing Card (Figma 6A)
+                  : Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 16, vertical: 14),
+                      decoration: BoxDecoration(
+                        color: AppColors.surface,
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(color: AppColors.border),
+                      ),
+                      child: Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: AppColors.cyan.withValues(alpha: 0.15),
+                            ),
+                            child: const Icon(Icons.radio_button_checked,
+                                size: 16, color: AppColors.cyan),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text(
+                                  'LIVE INTENT REGISTRY',
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.bold,
+                                    color: AppColors.cyan,
+                                    letterSpacing: 0.8,
+                                  ),
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  _simCallState.isNotEmpty
+                                      ? 'SIM State: $_simCallState'
+                                      : 'Registering Intent ${_request.requestId}... Placing SIM call...',
+                                  style: const TextStyle(
+                                    fontSize: 12,
+                                    color: AppColors.textSecondary,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
                       ),
                     ),
+            ),
+
+            const Spacer(flex: 1),
+
+            // Big Red Call End Button
+            GestureDetector(
+              onTap: _isCancelling ? null : _cancelCloudRequest,
+              child: Container(
+                width: 68,
+                height: 68,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: AppColors.redGradient,
+                  boxShadow: [
+                    BoxShadow(
+                      color: AppColors.red.withValues(alpha: 0.4),
+                      blurRadius: 18,
+                      spreadRadius: 2,
+                    ),
                   ],
                 ),
+                child: const Icon(Icons.call_end, color: Colors.white, size: 30),
               ),
-            const SizedBox(height: 12),
-
-            // SIM call state
-            if (_simCallState.isNotEmpty)
-              _InfoCard(title: 'SIM / Cellular Call', children: [
-                _InfoRow('State', _simCallState, color: _statusColor),
-                const _InfoRow('Path', 'Android Telecom → SIM → Carrier'),
-                const _InfoRow('Audio', 'Cellular network (not internet)'),
-              ]),
-            const SizedBox(height: 20),
-
-            // Place SIM Call button
-            if (isPending && !_simCallStarted)
-              SizedBox(
-                height: 52,
-                child: ElevatedButton.icon(
-                  onPressed: _isPlacingCall ? null : _placeSIMCall,
-                  icon: _isPlacingCall
-                      ? const SizedBox(width: 18, height: 18,
-                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                      : const Icon(Icons.call),
-                  label: Text(_isPlacingCall ? 'Connecting…' : 'Place SIM Call',
-                      style: const TextStyle(fontSize: 16)),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.green.shade600,
-                    foregroundColor: Colors.white,
-                  ),
-                ),
-              ),
-
-            // Waiting for InCallService (after call placed, before event arrives)
-            if (isPending && _simCallStarted && _activeCallId == null)
-              Column(children: [
-                const CircularProgressIndicator(),
-                const SizedBox(height: 8),
-                Text('Waiting for call state…',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(color: Colors.grey.shade600)),
-                const SizedBox(height: 4),
-                Text('(Full in-call controls appear when InCallService is active)',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(fontSize: 11, color: Colors.grey.shade400)),
-              ]),
-
-            const SizedBox(height: 16),
-
-            // Cancel cloud request
-            if (isPending)
-              SizedBox(
-                height: 48,
-                child: OutlinedButton.icon(
-                  onPressed: _isCancelling ? null : _cancelCloudRequest,
-                  icon: _isCancelling
-                      ? const SizedBox(width: 16, height: 16,
-                          child: CircularProgressIndicator(strokeWidth: 2))
-                      : const Icon(Icons.close),
-                  label: const Text('CANCEL REQUEST', style: TextStyle(fontSize: 15)),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: Colors.red.shade700,
-                    side: BorderSide(color: Colors.red.shade400),
-                  ),
-                ),
-              ),
-
-            // Terminal state
-            if (isTerminal) ...[
-              Container(
-                padding: const EdgeInsets.all(14),
-                decoration: BoxDecoration(
-                  color: Colors.grey.shade100,
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Text('Request ${_request.status}',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(color: Colors.grey.shade700,
-                        fontWeight: FontWeight.bold)),
-              ),
-              const SizedBox(height: 14),
-              SizedBox(
-                height: 48,
-                child: ElevatedButton.icon(
-                  onPressed: () => Navigator.pop(context),
-                  icon: const Icon(Icons.home_outlined),
-                  label: const Text('Back to Home'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.blue.shade700,
-                    foregroundColor: Colors.white,
-                  ),
-                ),
-              ),
-            ],
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              'Cancel / End Attempt',
+              style: TextStyle(fontSize: 12, color: AppColors.textMuted),
+            ),
+            const SizedBox(height: 24),
           ],
         ),
       ),
-    );
-  }
-}
-
-// ── Small helper widgets ──────────────────────────────────────────────────────
-
-class _InfoCard extends StatelessWidget {
-  final String title;
-  final List<Widget> children;
-  const _InfoCard({required this.title, required this.children});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: Colors.white, borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: Colors.grey.shade200),
-      ),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text(title.toUpperCase(), style: TextStyle(fontSize: 10,
-            fontWeight: FontWeight.bold, color: Colors.grey.shade500, letterSpacing: 1.2)),
-        const SizedBox(height: 8),
-        ...children,
-      ]),
-    );
-  }
-}
-
-class _InfoRow extends StatelessWidget {
-  final String label;
-  final String value;
-  final Color? color;
-  final bool mono;
-  const _InfoRow(this.label, this.value, {this.color, this.mono = false});
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 3),
-      child: Row(children: [
-        SizedBox(width: 90,
-            child: Text(label, style: TextStyle(fontSize: 12, color: Colors.grey.shade600))),
-        Expanded(child: Text(value, style: TextStyle(fontSize: 13,
-            fontWeight: FontWeight.w600, color: color,
-            fontFamily: mono ? 'monospace' : null))),
-      ]),
     );
   }
 }

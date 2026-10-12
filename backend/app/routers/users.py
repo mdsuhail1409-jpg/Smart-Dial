@@ -58,6 +58,11 @@ def update_preferences(
     db.add(current_user)
     db.commit()
     db.refresh(current_user)
+    try:
+        from app.mongodb import sync_user_to_mongo
+        sync_user_to_mongo(current_user)
+    except Exception:
+        pass
     return UserResponse.model_validate(current_user)
 
 

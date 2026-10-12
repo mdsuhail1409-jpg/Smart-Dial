@@ -56,6 +56,12 @@ def register(payload: RegisterRequest, db: Session = Depends(get_db)) -> UserRes
     try:
         db.commit()
         db.refresh(new_user)
+        # Persist to MongoDB Atlas for zero-data-loss durability
+        try:
+            from app.mongodb import sync_user_to_mongo
+            sync_user_to_mongo(new_user)
+        except Exception:
+            pass
     except IntegrityError:
         db.rollback()
         raise HTTPException(
@@ -79,6 +85,37 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)) -> TokenResponse
     to avoid leaking which field was incorrect (timing-safe equivalent behavior).
     """
     user = db.query(User).filter(User.email == payload.email).first()
+
+    # Fallback to MongoDB Atlas if local container was restarted / cold booted
+    if user is None:
+        try:
+            from app.mongodb import get_user_by_email
+            from app.models.user import UserStatus, ReciprocalCallPreference
+            m_user = get_user_by_email(payload.email)
+            if m_user:
+                pref_val = m_user.get("reciprocal_call_preference", "ASK")
+                try:
+                    pref_enum = ReciprocalCallPreference(pref_val)
+                except Exception:
+                    pref_enum = ReciprocalCallPreference.ASK
+
+                restored_user = User(
+                    id=m_user.get("id"),
+                    name=m_user.get("name"),
+                    email=m_user.get("email"),
+                    phone=m_user.get("phone"),
+                    password_hash=m_user.get("password_hash"),
+                    status=UserStatus.ACTIVE,
+                    reciprocal_call_preference=pref_enum,
+                    dnd_enabled=bool(m_user.get("dnd_enabled", False)),
+                    vip_contacts=str(m_user.get("vip_contacts", "") or ""),
+                )
+                db.add(restored_user)
+                db.commit()
+                db.refresh(restored_user)
+                user = restored_user
+        except Exception:
+            db.rollback()
 
     # Deliberate: same error for unknown user OR wrong password
     if user is None or not verify_password(payload.password, user.password_hash):
