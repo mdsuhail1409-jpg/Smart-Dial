@@ -26,18 +26,30 @@ class UserSummary(BaseModel):
 
 class CreateCallRequest(BaseModel):
     """
-    Flutter sends ONLY the receiver_id.
+    Flutter sends receiver_id or receiver_phone.
     The backend derives caller_id from the JWT — never trusting client input.
     """
 
-    receiver_id: int
+    receiver_id: Optional[int] = None
+    receiver_phone: Optional[str] = None
 
     @field_validator("receiver_id")
     @classmethod
-    def receiver_must_be_positive(cls, v: int) -> int:
-        if v <= 0:
+    def receiver_must_be_positive(cls, v: Optional[int]) -> Optional[int]:
+        if v is not None and v <= 0:
             raise ValueError("receiver_id must be a positive integer")
         return v
+
+    @field_validator("receiver_phone")
+    @classmethod
+    def normalize_receiver_phone(cls, v: Optional[str]) -> Optional[str]:
+        if v is None:
+            return None
+        from app.utils.phone_normalizer import normalize_to_e164
+        try:
+            return normalize_to_e164(v)
+        except ValueError as exc:
+            raise ValueError(f"Invalid receiver phone: {exc}")
 
 
 # ── Outbound ──────────────────────────────────────────────────────────────────

@@ -68,45 +68,265 @@ class _RegisterScreenState extends State<RegisterScreen> {
         : '$_selectedCountryCode${phoneRaw.replaceAll(RegExp(r'\D'), '')}';
 
     final emailInput = _emailController.text.trim();
-    final String email;
-    if (emailInput.isNotEmpty) {
-      email = emailInput;
-    } else {
-      final digits = fullPhone.replaceAll(RegExp(r'\D'), '');
-      email = '$digits@smartdial.com';
-    }
+    final String email = emailInput.isNotEmpty
+        ? emailInput
+        : '${fullPhone.replaceAll(RegExp(r'\D'), '')}@smartdial.com';
 
-    final error = await AuthService.register(
-      name: _nameController.text.trim(),
-      email: email,
-      phone: fullPhone,
-      password: _passwordController.text,
-    );
-
+    // Step 1: Send SMS OTP to verify phone number possession
+    final otpRes = await AuthService.sendOtp(fullPhone);
     if (!mounted) return;
     setState(() => _isLoading = false);
 
-    if (error != null) {
+    if (!otpRes.isSuccess) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(error),
+          content: Text(otpRes.error ?? 'Could not send verification code'),
           backgroundColor: AppColors.red,
           behavior: SnackBarBehavior.floating,
-          duration: const Duration(seconds: 5),
         ),
       );
       return;
     }
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Account created on Render Cloud! Please sign in.'),
-        backgroundColor: AppColors.green,
-        behavior: SnackBarBehavior.floating,
-        duration: Duration(seconds: 3),
-      ),
+    final devCode = otpRes.data?['dev_code'] as String? ?? '';
+    _showOtpVerificationSheet(fullPhone: fullPhone, email: email, devCode: devCode);
+  }
+
+  void _showOtpVerificationSheet({
+    required String fullPhone,
+    required String email,
+    required String devCode,
+  }) {
+    final otpController = TextEditingController(text: devCode);
+    bool isVerifying = false;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (context, setSheetState) {
+            return Padding(
+              padding: EdgeInsets.only(
+                bottom: MediaQuery.of(context).viewInsets.bottom,
+              ),
+              child: Container(
+                padding: const EdgeInsets.all(24),
+                decoration: const BoxDecoration(
+                  color: Color(0xFF131D33),
+                  borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Center(
+                      child: Container(
+                        width: 40,
+                        height: 4,
+                        decoration: BoxDecoration(
+                          color: AppColors.border,
+                          borderRadius: BorderRadius.circular(2),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            color: AppColors.cyan.withValues(alpha: 0.15),
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(Icons.shield_outlined,
+                              color: AppColors.cyan, size: 24),
+                        ),
+                        const SizedBox(width: 14),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text(
+                                'SIM Ownership Verification',
+                                style: TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.white,
+                                ),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                'Code dispatched to $fullPhone',
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  color: AppColors.textSecondary,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 20),
+                    if (devCode.isNotEmpty)
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 8),
+                        margin: const EdgeInsets.only(bottom: 16),
+                        decoration: BoxDecoration(
+                          color: AppColors.green.withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                              color: AppColors.green.withValues(alpha: 0.4)),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.check_circle_outline,
+                                color: AppColors.green, size: 16),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                'Verification Code: $devCode',
+                                style: const TextStyle(
+                                  color: AppColors.green,
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    const Text(
+                      'Enter 6-digit Code',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.textSecondary,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    TextField(
+                      controller: otpController,
+                      keyboardType: TextInputType.number,
+                      maxLength: 6,
+                      style: const TextStyle(
+                        fontSize: 22,
+                        letterSpacing: 8,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                      ),
+                      textAlign: TextAlign.center,
+                      decoration: InputDecoration(
+                        counterText: '',
+                        filled: true,
+                        fillColor: AppColors.surface,
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: const BorderSide(color: AppColors.border),
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: const BorderSide(color: AppColors.border),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: const BorderSide(color: AppColors.cyan, width: 2),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                    SizedBox(
+                      width: double.infinity,
+                      height: 50,
+                      child: ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.cyan,
+                          foregroundColor: Colors.white,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                        onPressed: isVerifying
+                            ? null
+                            : () async {
+                                final messenger = ScaffoldMessenger.of(context);
+                                final nav = Navigator.of(context);
+                                setSheetState(() => isVerifying = true);
+                                final code = otpController.text.trim();
+                                final verifyRes = await AuthService.verifyOtp(
+                                    fullPhone, code);
+
+                                if (!verifyRes.isSuccess) {
+                                  setSheetState(() => isVerifying = false);
+                                  messenger.showSnackBar(
+                                    SnackBar(
+                                      content: Text(verifyRes.error ??
+                                          'Invalid verification code'),
+                                      backgroundColor: AppColors.red,
+                                    ),
+                                  );
+                                  return;
+                                }
+
+                                // Code verified! Finalize user registration on Render
+                                final error = await AuthService.register(
+                                  name: _nameController.text.trim(),
+                                  email: email,
+                                  phone: fullPhone,
+                                  password: _passwordController.text,
+                                );
+
+                                nav.pop();
+
+                                if (error != null) {
+                                  messenger.showSnackBar(
+                                    SnackBar(
+                                      content: Text(error),
+                                      backgroundColor: AppColors.red,
+                                    ),
+                                  );
+                                  return;
+                                }
+
+                                messenger.showSnackBar(
+                                  const SnackBar(
+                                    content: Text(
+                                        'SIM verified & account registered successfully!'),
+                                    backgroundColor: AppColors.green,
+                                  ),
+                                );
+                                nav.pushReplacementNamed('/login');
+                              },
+                        child: isVerifying
+                            ? const SizedBox(
+                                width: 22,
+                                height: 22,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: Colors.white,
+                                ),
+                              )
+                            : const Text(
+                                'Verify & Complete Registration',
+                                style: TextStyle(
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
     );
-    Navigator.pushReplacementNamed(context, '/login');
   }
 
   @override

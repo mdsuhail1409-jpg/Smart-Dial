@@ -8,7 +8,16 @@ from sqlalchemy.exc import IntegrityError
 
 from app.database import get_db
 from app.models.user import User
-from app.schemas.auth import RegisterRequest, LoginRequest, TokenResponse
+from app.schemas.auth import (
+    RegisterRequest,
+    LoginRequest,
+    TokenResponse,
+    OtpSendRequest,
+    OtpSendResponse,
+    OtpVerifyRequest,
+    OtpVerifyResponse,
+)
+from app.services.otp_service import send_otp, verify_otp
 from app.schemas.user import UserResponse
 from app.security.password import hash_password, verify_password
 from app.security.jwt import create_access_token
@@ -131,4 +140,41 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)) -> TokenResponse
         access_token=token,
         token_type="bearer",
         user=UserResponse.model_validate(user),
+    )
+
+
+@router.post(
+    "/otp/send",
+    response_model=OtpSendResponse,
+    summary="Dispatch a 6-digit verification code to the phone number",
+)
+def request_phone_otp(payload: OtpSendRequest) -> OtpSendResponse:
+    """
+    Generate and dispatch a cryptographically secure 6-digit OTP
+    to verify possession of the E.164 phone number.
+    """
+    res = send_otp(payload.phone)
+    return OtpSendResponse(**res)
+
+
+@router.post(
+    "/otp/verify",
+    response_model=OtpVerifyResponse,
+    summary="Verify possession of phone number using 6-digit code",
+)
+def verify_phone_otp(payload: OtpVerifyRequest) -> OtpVerifyResponse:
+    """
+    Verify the 6-digit code sent to the phone number.
+    Prevents phone number spoofing and unauthorized registration.
+    """
+    is_valid = verify_otp(payload.phone, payload.code)
+    if not is_valid:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid or expired verification code",
+        )
+    return OtpVerifyResponse(
+        verified=True,
+        phone=payload.phone,
+        message="Phone number successfully verified",
     )

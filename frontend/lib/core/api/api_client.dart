@@ -127,6 +127,49 @@ class ApiClient {
     }
   }
 
+  /// POST /api/auth/otp/send — dispatch phone verification code
+  static Future<ApiResult<Map<String, dynamic>>> sendOtp(String phone) async {
+    try {
+      final response = await http
+          .post(
+            Uri.parse('$_base/api/auth/otp/send'),
+            headers: _jsonHeaders(),
+            body: jsonEncode({'phone': phone}),
+          )
+          .timeout(_timeout);
+
+      if (response.statusCode == 200) {
+        return ApiResult.success(jsonDecode(response.body) as Map<String, dynamic>);
+      }
+      return ApiResult.failure(_errorDetail(response));
+    } catch (e) {
+      return ApiResult.failure('Failed to send OTP: $e');
+    }
+  }
+
+  /// POST /api/auth/otp/verify — verify code possession
+  static Future<ApiResult<Map<String, dynamic>>> verifyOtp({
+    required String phone,
+    required String code,
+  }) async {
+    try {
+      final response = await http
+          .post(
+            Uri.parse('$_base/api/auth/otp/verify'),
+            headers: _jsonHeaders(),
+            body: jsonEncode({'phone': phone, 'code': code}),
+          )
+          .timeout(_timeout);
+
+      if (response.statusCode == 200) {
+        return ApiResult.success(jsonDecode(response.body) as Map<String, dynamic>);
+      }
+      return ApiResult.failure(_errorDetail(response));
+    } catch (e) {
+      return ApiResult.failure('Failed to verify OTP: $e');
+    }
+  }
+
   /// GET /api/users — protected endpoint.
   static Future<ApiResult<Map<String, dynamic>>> getUsers() async {
     try {

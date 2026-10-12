@@ -23,10 +23,11 @@ class RegisterRequest(BaseModel):
     @field_validator("phone")
     @classmethod
     def phone_basic_validation(cls, v: str) -> str:
-        v = v.strip()
-        if len(v) < 7:
-            raise ValueError("phone number is too short")
-        return v
+        from app.utils.phone_normalizer import normalize_to_e164
+        try:
+            return normalize_to_e164(v)
+        except ValueError as exc:
+            raise ValueError(f"Invalid phone number: {exc}")
 
     @field_validator("password")
     @classmethod
@@ -45,3 +46,53 @@ class TokenResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
     user: UserResponse
+
+
+class OtpSendRequest(BaseModel):
+    phone: str
+
+    @field_validator("phone")
+    @classmethod
+    def validate_and_normalize_phone(cls, v: str) -> str:
+        from app.utils.phone_normalizer import normalize_to_e164
+        try:
+            return normalize_to_e164(v)
+        except ValueError as exc:
+            raise ValueError(f"Invalid phone number: {exc}")
+
+
+class OtpSendResponse(BaseModel):
+    status: str
+    phone: str
+    expires_in_seconds: int
+    dev_code: str
+    message: str
+
+
+class OtpVerifyRequest(BaseModel):
+    phone: str
+    code: str
+
+    @field_validator("phone")
+    @classmethod
+    def validate_and_normalize_phone(cls, v: str) -> str:
+        from app.utils.phone_normalizer import normalize_to_e164
+        try:
+            return normalize_to_e164(v)
+        except ValueError as exc:
+            raise ValueError(f"Invalid phone number: {exc}")
+
+    @field_validator("code")
+    @classmethod
+    def validate_code(cls, v: str) -> str:
+        v = v.strip()
+        if len(v) != 6 or not v.isdigit():
+            raise ValueError("Verification code must be 6 digits")
+        return v
+
+
+class OtpVerifyResponse(BaseModel):
+    verified: bool
+    phone: str
+    message: str
+

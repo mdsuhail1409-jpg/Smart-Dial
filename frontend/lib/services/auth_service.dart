@@ -52,4 +52,13 @@ class AuthService {
     final token = await SecureStorage.getToken();
     return token != null;
   }
+
+  /// Send phone OTP verification code.
+  static Future<ApiResult<Map<String, dynamic>>> sendOtp(String phone) =>
+      ApiClient.sendOtp(phone);
+
+  /// Verify phone OTP code.
+  static Future<ApiResult<Map<String, dynamic>>> verifyOtp(
+          String phone, String code) =>
+      ApiClient.verifyOtp(phone: phone, code: code);
 }

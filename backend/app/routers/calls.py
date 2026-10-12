@@ -61,10 +61,49 @@ def create_request(
     The caller is always the authenticated JWT user.
     Flutter sends only `receiver_id` — never `caller_id`.
     """
+    target_receiver_id = payload.receiver_id
+
+    # If receiver_id is not provided, look up by normalized phone number
+    if target_receiver_id is None:
+        if payload.receiver_phone:
+            rec_user = db.query(User).filter(User.phone == payload.receiver_phone).first()
+            if rec_user is None:
+                try:
+                    from app.mongodb import get_user_by_phone
+                    from app.models.user import UserStatus, ReciprocalCallPreference
+                    m_u = get_user_by_phone(payload.receiver_phone)
+                    if m_u:
+                        rec_user = User(
+                            id=m_u.get("id"),
+                            name=m_u.get("name"),
+                            email=m_u.get("email"),
+                            phone=m_u.get("phone"),
+                            password_hash=m_u.get("password_hash"),
+                            status=UserStatus.ACTIVE,
+                            reciprocal_call_preference=ReciprocalCallPreference.ASK,
+                        )
+                        db.add(rec_user)
+                        db.commit()
+                        db.refresh(rec_user)
+                except Exception:
+                    pass
+            if rec_user:
+                target_receiver_id = rec_user.id
+            else:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=f"No user registered with phone {payload.receiver_phone}",
+                )
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Either receiver_id or receiver_phone must be provided",
+            )
+
     try:
         req = create_call_request(
             caller=current_user,
-            receiver_id=payload.receiver_id,
+            receiver_id=target_receiver_id,
             db=db,
         )
     except ValueError as exc:
