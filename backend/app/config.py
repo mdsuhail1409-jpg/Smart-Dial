@@ -11,6 +11,7 @@ class Settings(BaseSettings):
     # Database
     DATABASE_URL: str = "sqlite:///./smartdial.db"
     MONGODB_URL: str = "mongodb+srv://suhailzia14_db_user:hnxlZb7w4Ov86nNA@smart-dial.n7jazjh.mongodb.net/smartdial?retryWrites=true&w=majority&appName=Smart-Dial"
+    FAST2SMS_API_KEY: str = "SsHygcZevhfWxdAaiFt1qNJD5Pr8o3lEKGk2mj7zROTYX0nCI98O4aB5hfNL0RrxITJ23P7dsWXzgock"
 
     # JWT
     JWT_SECRET_KEY: str

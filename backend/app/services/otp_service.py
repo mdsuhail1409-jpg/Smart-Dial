@@ -55,15 +55,55 @@ def send_otp(phone_e164: str) -> Dict[str, Any]:
 
     logger.info(f"Generated OTP for {phone_e164}: {code} (expires in {OTP_TTL_MINUTES}m)")
 
-    # For development and initial verification, code is returned in response
-    # In production, this would trigger an SMS gateway (Twilio / MSG91)
+    # Dispatch real SMS text message to physical SIM via Fast2SMS
+    sms_delivered = _dispatch_real_sms(phone_e164, code)
+
     return {
         "status": "sent",
         "phone": phone_e164,
         "expires_in_seconds": OTP_TTL_MINUTES * 60,
-        "dev_code": code,  # Provided for immediate testing without paid SMS gateway
-        "message": f"Verification code sent to {phone_e164}",
+        "dev_code": code,  # Also retained as fallback in dev mode
+        "real_sms_delivered": sms_delivered,
+        "message": f"Verification code sent via SMS to {phone_e164}",
     }
+
+
+def _dispatch_real_sms(phone_e164: str, code: str) -> bool:
+    """Send real SMS via Fast2SMS API to physical mobile phone."""
+    try:
+        from app.config import get_settings
+        import httpx
+
+        settings = get_settings()
+        api_key = getattr(settings, "FAST2SMS_API_KEY", None)
+        if not api_key:
+            return False
+
+        # Extract last 10 digits for Indian carrier routing
+        digits = "".join(filter(str.isdigit, phone_e164))
+        national_10 = digits[-10:] if len(digits) >= 10 else digits
+
+        url = "https://www.fast2sms.com/dev/bulkV2"
+        headers = {
+            "authorization": api_key,
+            "Content-Type": "application/json",
+        }
+        payload = {
+            "variables_values": code,
+            "route": "otp",
+            "numbers": national_10,
+        }
+        resp = httpx.post(url, headers=headers, json=payload, timeout=8.0)
+        data = resp.json()
+        if data.get("return") is True:
+            logger.info(f"Fast2SMS successfully delivered real SMS to {national_10}: {data}")
+            return True
+        else:
+            logger.warning(f"Fast2SMS returned non-success: {data}")
+            return False
+    except Exception as exc:
+        logger.error(f"Failed to dispatch real SMS via Fast2SMS: {exc}")
+        return False
 
 
 def verify_otp(phone_e164: str, entered_code: str) -> bool:
